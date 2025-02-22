@@ -47,8 +47,8 @@ export class GeminiProcessor {
    */
   public async processChunk(chunk: VideoChunk): Promise<AnalysisResult> {
     try {
-      // Convert video chunk to base64
-      const base64Data = await this.convertChunkToBase64(chunk);
+      // Convert video data to base64
+      const base64Data = await this.convertToBase64(chunk.data);
       
       // Create prompt with context
       const prompt = this.createAnalysisPrompt();
@@ -190,18 +190,22 @@ export class GeminiProcessor {
   }
 
   /**
-   * Convert a video chunk to base64 for Gemini API
+   * Convert video data to base64 string
    */
-  private async convertChunkToBase64(chunk: VideoChunk): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64data = reader.result as string;
-        resolve(base64data.split(',')[1]); // Remove data URL prefix
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(chunk.data);
-    });
+  private async convertToBase64(data: Blob | Buffer): Promise<string> {
+    if (Buffer.isBuffer(data)) {
+      // Node.js environment
+      return data.toString('base64');
+    } else {
+      // Browser environment
+      const buffer = await data.arrayBuffer();
+      const uint8Array = new Uint8Array(buffer);
+      let binary = '';
+      uint8Array.forEach(byte => {
+        binary += String.fromCharCode(byte);
+      });
+      return btoa(binary);
+    }
   }
 
   /**

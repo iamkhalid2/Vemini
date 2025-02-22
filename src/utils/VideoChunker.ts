@@ -1,6 +1,6 @@
 export interface VideoChunk {
   id: string;
-  data: Blob;
+  data: Blob | Buffer;
   timestamp: number;
   duration: number;
 }
@@ -145,20 +145,5 @@ export class VideoChunker {
     this.chunks = [];
     this.mediaRecorder = null;
     this.stream = null;
-  }
-
-  /**
-   * Convert a chunk to base64 for Gemini API
-   */
-  public async convertChunkToBase64(chunk: VideoChunk): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64data = reader.result as string;
-        resolve(base64data.split(',')[1]); // Remove data URL prefix
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(chunk.data);
-    });
   }
 }

@@ -31,8 +31,12 @@ function App() {
 
   const connectSocket = useCallback(() => {
     try {
-      const newSocket = io(import.meta.env.VITE_WS_URL || 'http://localhost:3000', {
-        transports: ['websocket', 'polling'],
+      const wsUrl = import.meta.env.VITE_WS_URL || 'http://localhost:3000';
+      console.log('🔌 Connecting to WebSocket server:', wsUrl);
+
+      const newSocket = io(wsUrl, {
+        transports: ['websocket'],
+        reconnection: true,
         reconnectionAttempts: maxReconnectAttempts,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
@@ -40,44 +44,52 @@ function App() {
       });
 
       newSocket.on('connect', () => {
-        console.log('Connected to server');
+        console.log('✅ Connected to server');
         setIsConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
       });
 
       newSocket.on('disconnect', (reason) => {
-        console.log('Disconnected:', reason);
+        console.log('❌ Disconnected:', reason);
         setIsConnected(false);
         
         if (reason === 'io server disconnect') {
           // Server initiated disconnect, try reconnecting
+          console.log('🔄 Server initiated disconnect, attempting reconnect...');
           newSocket.connect();
         }
       });
 
       newSocket.on('connect_error', (err) => {
-        console.error('Connection error:', err);
+        console.error('❌ Connection error:', err.message);
         setError(`Connection error: ${err.message}`);
         
         if (reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current++;
+          console.log(`🔄 Attempting to reconnect... (${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
+          
           reconnectTimeoutRef.current = window.setTimeout(() => {
-            console.log(`Attempting to reconnect... (${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
             newSocket.connect();
           }, 2000);
         }
       });
 
       newSocket.on('analysis-result', (result: Analysis) => {
+        console.log('📊 Received analysis result');
         setAnalysis(result);
       });
 
       newSocket.on('error', (err: { message: string }) => {
+        console.error('❌ Server error:', err.message);
         setError(err.message);
       });
 
-      // Ping to keep connection alive
+      newSocket.on('voice-response', (response: { response: string; timestamp: number }) => {
+        console.log('🤖 AI Response:', response.response);
+      });
+
+      // Keep connection alive
       const pingInterval = setInterval(() => {
         if (newSocket.connected) {
           newSocket.emit('ping');
@@ -91,6 +103,7 @@ function App() {
         newSocket.close();
       };
     } catch (err) {
+      console.error('❌ Failed to initialize connection:', err);
       setError(`Failed to initialize connection: ${err instanceof Error ? err.message : String(err)}`);
     }
   }, []);
@@ -108,32 +121,34 @@ function App() {
 
   const handleVideoChunk = async (chunk: Blob) => {
     if (!socket || !isConnected) {
-      console.warn('Cannot send video chunk: not connected');
+      console.warn('⚠️ Cannot send video chunk: not connected');
       return;
     }
 
     try {
-      // Convert Blob to Buffer for transmission
+      // Convert Blob to ArrayBuffer and then to Uint8Array for transmission
       const arrayBuffer = await chunk.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
+      const uint8Array = new Uint8Array(arrayBuffer);
       
-      socket.emit('video-chunk', buffer);
+      console.log('📤 Sending video chunk:', uint8Array.length, 'bytes');
+      socket.emit('video-chunk', uint8Array);
     } catch (err) {
-      console.error('Error sending video chunk:', err);
+      console.error('❌ Error sending video chunk:', err);
       setError(`Failed to send video chunk: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
   const handleVoiceCommand = (command: string) => {
     if (!socket || !isConnected) {
-      console.warn('Cannot send voice command: not connected');
+      console.warn('⚠️ Cannot send voice command: not connected');
       return;
     }
     
     try {
+      console.log('🎤 Sending voice command:', command);
       socket.emit('voice-command', command);
     } catch (err) {
-      console.error('Error sending voice command:', err);
+      console.error('❌ Error sending voice command:', err);
       setError(`Failed to send voice command: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
@@ -164,6 +179,15 @@ function App() {
         {error && (
           <div className="error-message">
             {error}
+            <button 
+              className="retry-button"
+              onClick={() => {
+                setError(null);
+                connectSocket();
+              }}
+            >
+              Retry Connection
+            </button>
           </div>
         )}
       </main>

@@ -97,6 +97,31 @@
   animation: slideUp 0.3s ease-out;
   max-width: 90%;
   z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-unit);
+}
+
+.retry-button {
+  background-color: white;
+  color: var(--accent-color);
+  border: none;
+  padding: calc(var(--spacing-unit) / 2) var(--spacing-unit);
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.retry-button:hover {
+  background-color: rgba(255, 255, 255, 0.9);
+  transform: scale(1.05);
+}
+
+.retry-button:active {
+  transform: scale(0.95);
 }
 
 @keyframes slideUp {
@@ -139,5 +164,10 @@
   .connection-status {
     width: 100%;
     justify-content: center;
+  }
+
+  .error-message {
+    text-align: center;
+    width: calc(100% - var(--spacing-unit) * 4);
   }
 }

@@ -42,7 +42,7 @@ const geminiProcessor = new GeminiProcessor(GEMINI_API_KEY);
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
-  console.log('Client connected');
+  console.log('🔌 Client connected');
 
   // Send initial connection status
   socket.emit('connection_status', { 
@@ -51,13 +51,13 @@ io.on('connection', (socket) => {
   });
 
   // Handle incoming video chunks
-  socket.on('video-chunk', async (chunk: Buffer) => {
+  socket.on('video-chunk', async (chunk: Uint8Array) => {
     try {
-      // Convert Buffer to Blob for processing
-      const blob = new Blob([chunk], { type: 'video/webm' });
+      // Convert Uint8Array to Buffer for processing
+      const buffer = Buffer.from(chunk);
       const videoChunk = {
         id: `chunk-${Date.now()}`,
-        data: blob,
+        data: buffer,
         timestamp: Date.now(),
         duration: 3000 // 3 seconds
       };
@@ -68,7 +68,7 @@ io.on('connection', (socket) => {
       // Send analysis back to client
       socket.emit('analysis-result', analysis);
     } catch (error) {
-      console.error('Error processing video chunk:', error);
+      console.error('❌ Error processing video chunk:', error);
       socket.emit('error', {
         message: 'Failed to process video chunk',
         error: error instanceof Error ? error.message : String(error),
@@ -80,8 +80,13 @@ io.on('connection', (socket) => {
   // Handle voice commands
   socket.on('voice-command', async (command: string) => {
     try {
+      console.log('\n👤 User:', command);
+
       // Generate response using Gemini processor
       const response = await geminiProcessor.generateVoiceResponse(command);
+      
+      console.log('🤖 Assistant:', response);
+      console.log('-------------------------------------------');
 
       // Send response back to client
       socket.emit('voice-response', {
@@ -89,7 +94,7 @@ io.on('connection', (socket) => {
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('Error processing voice command:', error);
+      console.error('❌ Error processing voice command:', error);
       socket.emit('error', {
         message: 'Failed to process voice command',
         error: error instanceof Error ? error.message : String(error),
@@ -105,7 +110,7 @@ io.on('connection', (socket) => {
 
   // Handle disconnection
   socket.on('disconnect', (reason) => {
-    console.log('Client disconnected:', reason);
+    console.log('🔌 Client disconnected:', reason);
   });
 });
 
@@ -120,16 +125,17 @@ app.get('/health', (req, res) => {
 
 // Start the server
 httpServer.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`WebSocket server accepting connections from: ${CORS_ORIGIN}`);
+  console.log(`\n🚀 Server running on port ${PORT}`);
+  console.log(`📡 WebSocket server accepting connections from: ${CORS_ORIGIN}`);
+  console.log('-------------------------------------------\n');
 });
 
 // Error handling
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
 process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
+  console.error('❌ Uncaught Exception:', error);
   process.exit(1);
 });
