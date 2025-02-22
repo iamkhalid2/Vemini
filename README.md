@@ -1,4 +1,4 @@
-# Real-time Video Assistant
+# Vemini
 
 A web-based application that provides near real-time video analysis with voice interaction capabilities using Google's Gemini API.
 
