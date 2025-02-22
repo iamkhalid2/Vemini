@@ -1,22 +1,28 @@
 import { GoogleGenerativeAI, GenerativeModel, Part } from '@google/generative-ai';
-import { VideoChunk } from './VideoChunker';
 
-interface ProcessingContext {
-  recentObjects: Array<{
-    name: string;
-    lastSeenAt: number;
-    position?: { x: number; y: number };
-  }>;
-  sceneDescription?: string;
-  lastProcessedTimestamp: number;
+interface Frame {
+  id: string;
+  data: string; // base64 encoded image
+  timestamp: number;
+}
+
+interface Object {
+  name: string;
+  position?: { x: number; y: number };
+  confidence: number;
+  lastSeenAt: number;
+}
+
+interface Action {
+  description: string;
+  objects: string[];
+  confidence: number;
+  timestamp: number;
 }
 
 interface AnalysisResult {
-  objects: Array<{
-    name: string;
-    position?: { x: number; y: number };
-    confidence: number;
-  }>;
+  objects: Object[];
+  actions: Action[];
   sceneDescription: string;
   relationships: Array<{
     object1: string;
@@ -26,42 +32,54 @@ interface AnalysisResult {
   timestamp: number;
 }
 
+interface ProcessingContext {
+  recentObjects: Object[];
+  recentActions: Action[];
+  sceneDescription?: string;
+  lastProcessedTimestamp: number;
+  contextWindow: Frame[]; // Keep last N frames for context
+}
+
 export class GeminiProcessor {
   private model: GenerativeModel;
   private context: ProcessingContext;
   private apiKey: string;
+  private readonly MAX_CONTEXT_FRAMES = 5;
+  private readonly OBJECT_MEMORY_DURATION = 10000; // 10 seconds
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
     this.context = {
       recentObjects: [],
-      lastProcessedTimestamp: 0
+      recentActions: [],
+      lastProcessedTimestamp: 0,
+      contextWindow: []
     };
     
     const genAI = new GoogleGenerativeAI(this.apiKey);
-    this.model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    this.model = genAI.getGenerativeModel({ model: "gemini-pro-vision" });
   }
 
   /**
-   * Process a video chunk using Gemini API
+   * Process a video frame using Gemini API
    */
-  public async processChunk(chunk: VideoChunk): Promise<AnalysisResult> {
+  public async processFrame(frame: Frame): Promise<AnalysisResult> {
     try {
-      // Convert video data to base64
-      const base64Data = await this.convertToBase64(chunk.data);
+      // Update context window
+      this.updateContextWindow(frame);
       
-      // Create prompt with context
+      // Create prompt with temporal context
       const prompt = this.createAnalysisPrompt();
 
       // Prepare parts for Gemini API
       const parts: Part[] = [
         { text: prompt },
-        {
+        ...this.context.contextWindow.map(frame => ({
           inlineData: {
-            mimeType: 'video/webm',
-            data: base64Data
+            mimeType: 'image/jpeg',
+            data: frame.data
           }
-        }
+        }))
       ];
 
       // Generate content with Gemini
@@ -74,7 +92,7 @@ export class GeminiProcessor {
 
       return analysis;
     } catch (error) {
-      console.error('Error processing chunk with Gemini:', error);
+      console.error('Error processing frame with Gemini:', error);
       throw error;
     }
   }
@@ -96,8 +114,13 @@ export class GeminiProcessor {
           `- ${obj.name} (last seen ${Date.now() - obj.lastSeenAt}ms ago)`
         ).join('\n')}
         
+        Recent actions:
+        ${this.context.recentActions.map(action => 
+          `- ${action.description} (${action.objects.join(', ')})`
+        ).join('\n')}
+        
         Please provide a natural response to the user's command, taking into account
-        the current scene context and visible objects.
+        the current scene context, visible objects, and recent actions.
       `;
 
       const parts: Part[] = [{ text: prompt }];
@@ -113,25 +136,35 @@ export class GeminiProcessor {
   }
 
   /**
-   * Create a prompt for Gemini that includes context from previous chunks
+   * Create a prompt for Gemini that includes temporal context
    */
   private createAnalysisPrompt(): string {
-    const contextStr = this.context.recentObjects
+    const recentObjectsStr = this.context.recentObjects
       .map(obj => `${obj.name} was last seen ${Date.now() - obj.lastSeenAt}ms ago`)
       .join('. ');
 
+    const recentActionsStr = this.context.recentActions
+      .map(action => action.description)
+      .join('. ');
+
     return `
-      Previous context: ${contextStr}
-      Previous scene description: ${this.context.sceneDescription || 'None'}
+      Analyze this sequence of ${this.context.contextWindow.length} frames.
       
-      Please analyze this video chunk and provide:
-      1. A list of objects with their positions and confidence scores
-      2. A natural description of the scene
-      3. Spatial relationships between objects
+      Previous context:
+      Objects: ${recentObjectsStr}
+      Actions: ${recentActionsStr}
+      Scene description: ${this.context.sceneDescription || 'None'}
+      
+      Please provide:
+      1. A list of objects with their positions, confidence scores, and temporal consistency
+      2. Any actions or movements detected across frames
+      3. A natural description of the scene evolution
+      4. Spatial and temporal relationships between objects
       
       Format the response as JSON with the following structure:
       {
         "objects": [{"name": string, "position": {"x": number, "y": number}, "confidence": number}],
+        "actions": [{"description": string, "objects": string[], "confidence": number}],
         "sceneDescription": string,
         "relationships": [{"object1": string, "object2": string, "relationship": string}]
       }
@@ -160,52 +193,56 @@ export class GeminiProcessor {
   }
 
   /**
+   * Update context window with new frame
+   */
+  private updateContextWindow(frame: Frame): void {
+    this.context.contextWindow.push(frame);
+    if (this.context.contextWindow.length > this.MAX_CONTEXT_FRAMES) {
+      this.context.contextWindow.shift();
+    }
+  }
+
+  /**
    * Update the processing context with new information
    */
   private updateContext(analysis: AnalysisResult): void {
+    const currentTime = Date.now();
+
     // Update object positions and timestamps
     analysis.objects.forEach(obj => {
       const existingObj = this.context.recentObjects.find(o => o.name === obj.name);
       if (existingObj) {
-        existingObj.lastSeenAt = analysis.timestamp;
+        existingObj.lastSeenAt = currentTime;
         existingObj.position = obj.position;
+        existingObj.confidence = obj.confidence;
       } else {
         this.context.recentObjects.push({
-          name: obj.name,
-          lastSeenAt: analysis.timestamp,
-          position: obj.position
+          ...obj,
+          lastSeenAt: currentTime
         });
       }
     });
 
-    // Remove objects not seen recently (over 10 seconds ago)
-    const maxAge = 10000; // 10 seconds
+    // Add new actions
+    if (analysis.actions) {
+      this.context.recentActions.push(
+        ...analysis.actions.map(action => ({
+          ...action,
+          timestamp: currentTime
+        }))
+      );
+    }
+
+    // Remove old objects and actions
     this.context.recentObjects = this.context.recentObjects.filter(
-      obj => analysis.timestamp - obj.lastSeenAt < maxAge
+      obj => currentTime - obj.lastSeenAt < this.OBJECT_MEMORY_DURATION
     );
+
+    this.context.recentActions = this.context.recentActions.slice(-10); // Keep last 10 actions
 
     // Update scene description
     this.context.sceneDescription = analysis.sceneDescription;
-    this.context.lastProcessedTimestamp = analysis.timestamp;
-  }
-
-  /**
-   * Convert video data to base64 string
-   */
-  private async convertToBase64(data: Blob | Buffer): Promise<string> {
-    if (Buffer.isBuffer(data)) {
-      // Node.js environment
-      return data.toString('base64');
-    } else {
-      // Browser environment
-      const buffer = await data.arrayBuffer();
-      const uint8Array = new Uint8Array(buffer);
-      let binary = '';
-      uint8Array.forEach(byte => {
-        binary += String.fromCharCode(byte);
-      });
-      return btoa(binary);
-    }
+    this.context.lastProcessedTimestamp = currentTime;
   }
 
   /**
@@ -221,7 +258,9 @@ export class GeminiProcessor {
   public clearContext(): void {
     this.context = {
       recentObjects: [],
-      lastProcessedTimestamp: 0
+      recentActions: [],
+      lastProcessedTimestamp: 0,
+      contextWindow: []
     };
   }
 }

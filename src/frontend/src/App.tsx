@@ -1,16 +1,25 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Socket, io } from 'socket.io-client';
-import VideoStream from './components/VideoStream';
+import { VideoFrameExtractor } from '../../utils/VideoFrameExtractor';
 import VoiceControl from './components/VoiceControl';
 import SceneAnalysis from './components/SceneAnalysis';
 import './styles/App.css';
 
+interface Object {
+  name: string;
+  position?: { x: number; y: number };
+  confidence: number;
+}
+
+interface Action {
+  description: string;
+  objects: string[];
+  confidence: number;
+}
+
 interface Analysis {
-  objects: Array<{
-    name: string;
-    position?: { x: number; y: number };
-    confidence: number;
-  }>;
+  objects: Object[];
+  actions: Action[];
   sceneDescription: string;
   relationships: Array<{
     object1: string;
@@ -25,6 +34,8 @@ function App() {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const frameExtractorRef = useRef<VideoFrameExtractor | null>(null);
   const reconnectTimeoutRef = useRef<number>();
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectAttempts = 5;
@@ -55,7 +66,6 @@ function App() {
         setIsConnected(false);
         
         if (reason === 'io server disconnect') {
-          // Server initiated disconnect, try reconnecting
           console.log('🔄 Server initiated disconnect, attempting reconnect...');
           newSocket.connect();
         }
@@ -78,28 +88,22 @@ function App() {
       newSocket.on('analysis-result', (result: Analysis) => {
         console.log('📊 Received analysis result');
         setAnalysis(result);
+        setIsProcessing(false);
       });
 
       newSocket.on('error', (err: { message: string }) => {
         console.error('❌ Server error:', err.message);
         setError(err.message);
+        setIsProcessing(false);
       });
 
       newSocket.on('voice-response', (response: { response: string; timestamp: number }) => {
         console.log('🤖 AI Response:', response.response);
       });
 
-      // Keep connection alive
-      const pingInterval = setInterval(() => {
-        if (newSocket.connected) {
-          newSocket.emit('ping');
-        }
-      }, 30000);
-
       setSocket(newSocket);
 
       return () => {
-        clearInterval(pingInterval);
         newSocket.close();
       };
     } catch (err) {
@@ -119,24 +123,51 @@ function App() {
     };
   }, [connectSocket]);
 
-  const handleVideoChunk = async (chunk: Blob) => {
-    if (!socket || !isConnected) {
-      console.warn('⚠️ Cannot send video chunk: not connected');
-      return;
+  useEffect(() => {
+    const initializeVideo = async () => {
+      try {
+        // Initialize frame extractor
+        frameExtractorRef.current = new VideoFrameExtractor({
+          targetFps: 2,
+          width: 640,
+          height: 480,
+          quality: 0.85
+        });
+
+        await frameExtractorRef.current.initialize();
+
+        // Set up frame handler
+        frameExtractorRef.current.onFrame(async (frame) => {
+          if (!socket?.connected || isProcessing) return;
+          
+          try {
+            setIsProcessing(true);
+            socket.emit('video-frame', frame);
+          } catch (err) {
+            console.error('❌ Error sending frame:', err);
+            setError(`Failed to send frame: ${err instanceof Error ? err.message : String(err)}`);
+            setIsProcessing(false);
+          }
+        });
+
+        // Start frame extraction
+        frameExtractorRef.current.start();
+        console.log('📹 Video processing started');
+
+      } catch (err) {
+        console.error('❌ Failed to initialize video:', err);
+        setError(`Failed to initialize video: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    };
+
+    if (isConnected) {
+      initializeVideo();
     }
 
-    try {
-      // Convert Blob to ArrayBuffer and then to Uint8Array for transmission
-      const arrayBuffer = await chunk.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-      
-      console.log('📤 Sending video chunk:', uint8Array.length, 'bytes');
-      socket.emit('video-chunk', uint8Array);
-    } catch (err) {
-      console.error('❌ Error sending video chunk:', err);
-      setError(`Failed to send video chunk: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  };
+    return () => {
+      frameExtractorRef.current?.dispose();
+    };
+  }, [isConnected, socket]);
 
   const handleVoiceCommand = (command: string) => {
     if (!socket || !isConnected) {
@@ -168,7 +199,19 @@ function App() {
 
       <main className="app-main">
         <div className="video-section">
-          <VideoStream onChunk={handleVideoChunk} />
+          <div className="video-container">
+            <video
+              id="videoElement"
+              autoPlay
+              playsInline
+              muted
+            />
+            {isProcessing && (
+              <div className="processing-indicator">
+                Processing...
+              </div>
+            )}
+          </div>
           <VoiceControl onCommand={handleVoiceCommand} />
         </div>
 

@@ -50,27 +50,22 @@ io.on('connection', (socket) => {
     timestamp: Date.now()
   });
 
-  // Handle incoming video chunks
-  socket.on('video-chunk', async (chunk: Uint8Array) => {
+  // Handle incoming video frames
+  socket.on('video-frame', async (frame: { id: string; data: string; timestamp: number }) => {
     try {
-      // Convert Uint8Array to Buffer for processing
-      const buffer = Buffer.from(chunk);
-      const videoChunk = {
-        id: `chunk-${Date.now()}`,
-        data: buffer,
-        timestamp: Date.now(),
-        duration: 3000 // 3 seconds
-      };
-
-      // Process chunk with Gemini
-      const analysis = await geminiProcessor.processChunk(videoChunk);
+      console.log(`📸 Received frame: ${frame.id}`);
+      
+      // Process frame with Gemini
+      const analysis = await geminiProcessor.processFrame(frame);
 
       // Send analysis back to client
       socket.emit('analysis-result', analysis);
+      
+      console.log(`✨ Analysis complete for frame: ${frame.id}`);
     } catch (error) {
-      console.error('❌ Error processing video chunk:', error);
+      console.error('❌ Error processing frame:', error);
       socket.emit('error', {
-        message: 'Failed to process video chunk',
+        message: 'Failed to process frame',
         error: error instanceof Error ? error.message : String(error),
         timestamp: Date.now()
       });
@@ -119,7 +114,10 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok',
     timestamp: Date.now(),
-    wsClients: io.engine.clientsCount
+    wsClients: io.engine.clientsCount,
+    processor: {
+      context: geminiProcessor.getContext()
+    }
   });
 });
 
