@@ -1,0 +1,128 @@
+.scene-analysis {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-unit);
+}
+
+.analysis-container {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing-unit) * 2);
+  height: 100%;
+  overflow-y: auto;
+}
+
+.canvas-container {
+  position: relative;
+  width: 100%;
+  background-color: black;
+  border-radius: var(--border-radius);
+  overflow: hidden;
+}
+
+.analysis-canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.scene-description,
+.objects-list,
+.relationships {
+  background-color: var(--background-color);
+  padding: calc(var(--spacing-unit) * 2);
+  border-radius: var(--border-radius);
+}
+
+.scene-description h3,
+.objects-list h3,
+.relationships h3 {
+  margin-bottom: var(--spacing-unit);
+  color: var(--primary-color);
+  font-size: 1.1rem;
+}
+
+.objects-list ul,
+.relationships ul {
+  list-style: none;
+  padding: 0;
+}
+
+.objects-list li,
+.relationships li {
+  padding: calc(var(--spacing-unit) / 2) 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.objects-list li:last-child,
+.relationships li:last-child {
+  border-bottom: none;
+}
+
+.timestamp {
+  color: #7f8c8d;
+  font-size: 0.875rem;
+  text-align: right;
+  padding: var(--spacing-unit);
+}
+
+.waiting-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #7f8c8d;
+  font-style: italic;
+}
+
+/* Animation for new detections */
+@keyframes highlight {
+  0% {
+    background-color: rgba(52, 152, 219, 0.2);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.objects-list li,
+.relationships li {
+  animation: highlight 1s ease-out;
+}
+
+/* Confidence indicator styles */
+.objects-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.confidence-indicator {
+  display: inline-block;
+  width: 40px;
+  height: 4px;
+  background-color: #eee;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-left: var(--spacing-unit);
+}
+
+.confidence-bar {
+  height: 100%;
+  background-color: var(--secondary-color);
+  transition: width 0.3s ease;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .analysis-container {
+    gap: var(--spacing-unit);
+  }
+
+  .scene-description,
+  .objects-list,
+  .relationships {
+    padding: var(--spacing-unit);
+  }
+}
