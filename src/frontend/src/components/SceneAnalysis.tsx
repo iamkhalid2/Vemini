@@ -1,20 +1,22 @@
 import React, { useEffect, useRef } from 'react';
 import '../styles/SceneAnalysis.css';
 
-interface Object {
+interface DetectedObject {
   name: string;
   position?: { x: number; y: number };
   confidence: number;
+  lastSeenAt: number;
 }
 
 interface Action {
   description: string;
   objects: string[];
   confidence: number;
+  timestamp: number;
 }
 
 interface Analysis {
-  objects: Object[];
+  objects: DetectedObject[];
   actions: Action[];
   sceneDescription: string;
   relationships: Array<{
@@ -45,7 +47,7 @@ const SceneAnalysis: React.FC<SceneAnalysisProps> = ({ analysis }) => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Draw detected objects with motion trails
-    analysis.objects.forEach((object, index) => {
+    analysis.objects.forEach((object) => {
       if (object.position) {
         // Convert normalized coordinates to canvas coordinates
         const x = object.position.x * canvas.width;
@@ -62,7 +64,7 @@ const SceneAnalysis: React.FC<SceneAnalysisProps> = ({ analysis }) => {
             
             // Draw motion trail
             ctx.beginPath();
-            ctx.strokeStyle = `rgba(255, 0, 0, ${object.confidence * 0.3})`;
+            ctx.strokeStyle = `rgba(52, 152, 219, ${object.confidence * 0.3})`;
             ctx.setLineDash([5, 5]);
             ctx.moveTo(prevX + width/2, prevY + height/2);
             ctx.lineTo(x + width/2, y + height/2);
@@ -72,15 +74,22 @@ const SceneAnalysis: React.FC<SceneAnalysisProps> = ({ analysis }) => {
         }
 
         // Draw bounding box
-        ctx.strokeStyle = `rgba(255, 0, 0, ${object.confidence})`;
+        ctx.strokeStyle = `rgba(52, 152, 219, ${object.confidence})`;
         ctx.lineWidth = 2;
         ctx.strokeRect(x, y, width, height);
 
-        // Draw label with confidence
-        ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
+        // Draw label with confidence and time since last seen
+        const timeSinceLastSeen = (Date.now() - object.lastSeenAt) / 1000;
+        ctx.fillStyle = 'rgba(52, 152, 219, 0.8)';
         ctx.font = '14px Arial';
         ctx.fillText(
           `${object.name} (${Math.round(object.confidence * 100)}%)`,
+          x,
+          y - 20
+        );
+        ctx.font = '12px Arial';
+        ctx.fillText(
+          `Seen ${timeSinceLastSeen.toFixed(1)}s ago`,
           x,
           y - 5
         );
@@ -119,7 +128,7 @@ const SceneAnalysis: React.FC<SceneAnalysisProps> = ({ analysis }) => {
         </div>
 
         <div className="actions-list">
-          <h3>Detected Actions</h3>
+          <h3>Recent Actions</h3>
           <ul>
             {analysis.actions.map((action, index) => (
               <li key={index} className="action-item">
@@ -127,13 +136,16 @@ const SceneAnalysis: React.FC<SceneAnalysisProps> = ({ analysis }) => {
                   {action.description}
                 </div>
                 <div className="action-objects">
-                  Objects involved: {action.objects.join(', ')}
+                  Objects: {action.objects.join(', ')}
                 </div>
                 <div className="confidence-bar">
                   <div 
                     className="confidence-fill"
                     style={{ width: `${action.confidence * 100}%` }}
                   />
+                </div>
+                <div className="action-time">
+                  {((Date.now() - action.timestamp) / 1000).toFixed(1)}s ago
                 </div>
               </li>
             ))}
@@ -145,12 +157,17 @@ const SceneAnalysis: React.FC<SceneAnalysisProps> = ({ analysis }) => {
           <ul>
             {analysis.objects.map((object, index) => (
               <li key={index} className="object-item">
-                <span className="object-name">{object.name}</span>
-                <div className="confidence-indicator">
-                  <div 
-                    className="confidence-bar"
-                    style={{ width: `${object.confidence * 100}%` }}
-                  />
+                <div className="object-name">{object.name}</div>
+                <div className="object-confidence">
+                  <div className="confidence-bar">
+                    <div 
+                      className="confidence-fill"
+                      style={{ width: `${object.confidence * 100}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="object-time">
+                  {((Date.now() - object.lastSeenAt) / 1000).toFixed(1)}s ago
                 </div>
               </li>
             ))}
@@ -161,8 +178,10 @@ const SceneAnalysis: React.FC<SceneAnalysisProps> = ({ analysis }) => {
           <h3>Spatial Relationships</h3>
           <ul>
             {analysis.relationships.map((rel, index) => (
-              <li key={index}>
-                {rel.object1} {rel.relationship} {rel.object2}
+              <li key={index} className="relationship-item">
+                <span className="object-1">{rel.object1}</span>
+                <span className="relationship">{rel.relationship}</span>
+                <span className="object-2">{rel.object2}</span>
               </li>
             ))}
           </ul>

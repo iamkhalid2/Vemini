@@ -12,6 +12,73 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
 const WS_PING_INTERVAL = parseInt(process.env.WS_PING_INTERVAL || '30000', 10);
 const WS_PING_TIMEOUT = parseInt(process.env.WS_PING_TIMEOUT || '5000', 10);
 
+// Frame processing queue
+interface QueueItem {
+  frame: { id: string; data: string; timestamp: number };
+  socket: any;
+}
+
+class FrameQueue {
+  private queue: QueueItem[] = [];
+  private processing = false;
+  private processor: GeminiProcessor;
+  private maxQueueSize = 10;
+  private processDelay = 500; // 500ms between frames
+
+  constructor(processor: GeminiProcessor) {
+    this.processor = processor;
+  }
+
+  async enqueue(item: QueueItem): Promise<void> {
+    // If queue is full, remove oldest frame
+    if (this.queue.length >= this.maxQueueSize) {
+      this.queue.shift();
+    }
+    this.queue.push(item);
+    
+    if (!this.processing) {
+      this.processQueue();
+    }
+  }
+
+  private async processQueue(): Promise<void> {
+    if (this.queue.length === 0) {
+      this.processing = false;
+      return;
+    }
+
+    this.processing = true;
+    const item = this.queue.shift();
+    
+    if (item) {
+      try {
+        console.log(`📸 Processing frame: ${item.frame.id}`);
+        const analysis = await this.processor.processFrame(item.frame);
+        
+        item.socket.emit('analysis-result', analysis);
+        console.log(`✨ Analysis complete for frame: ${item.frame.id}`);
+        console.log(`   Objects detected: ${analysis.objects.length}`);
+        console.log(`   Actions detected: ${analysis.actions.length}`);
+      } catch (error) {
+        console.error('❌ Error processing frame:', error);
+        item.socket.emit('error', {
+          message: 'Failed to process frame',
+          error: error instanceof Error ? error.message : String(error),
+          timestamp: Date.now()
+        });
+      }
+
+      // Add delay before processing next frame
+      await new Promise(resolve => setTimeout(resolve, this.processDelay));
+      this.processQueue();
+    }
+  }
+
+  public getQueueLength(): number {
+    return this.queue.length;
+  }
+}
+
 if (!GEMINI_API_KEY) {
   throw new Error('GEMINI_API_KEY environment variable is required');
 }
@@ -37,8 +104,9 @@ app.use(cors({
   credentials: true
 }));
 
-// Initialize Gemini processor
+// Initialize Gemini processor and frame queue
 const geminiProcessor = new GeminiProcessor(GEMINI_API_KEY);
+const frameQueue = new FrameQueue(geminiProcessor);
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
@@ -52,24 +120,16 @@ io.on('connection', (socket) => {
 
   // Handle incoming video frames
   socket.on('video-frame', async (frame: { id: string; data: string; timestamp: number }) => {
-    try {
-      console.log(`📸 Received frame: ${frame.id}`);
-      
-      // Process frame with Gemini
-      const analysis = await geminiProcessor.processFrame(frame);
+    console.log(`📸 Received frame: ${frame.id}`);
+    
+    // Add frame to processing queue
+    await frameQueue.enqueue({ frame, socket });
 
-      // Send analysis back to client
-      socket.emit('analysis-result', analysis);
-      
-      console.log(`✨ Analysis complete for frame: ${frame.id}`);
-    } catch (error) {
-      console.error('❌ Error processing frame:', error);
-      socket.emit('error', {
-        message: 'Failed to process frame',
-        error: error instanceof Error ? error.message : String(error),
-        timestamp: Date.now()
-      });
-    }
+    // Send queue status
+    socket.emit('queue-status', {
+      queueLength: frameQueue.getQueueLength(),
+      timestamp: Date.now()
+    });
   });
 
   // Handle voice commands
@@ -115,6 +175,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: Date.now(),
     wsClients: io.engine.clientsCount,
+    queueLength: frameQueue.getQueueLength(),
     processor: {
       context: geminiProcessor.getContext()
     }

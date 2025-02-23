@@ -5,20 +5,22 @@ import VoiceControl from './components/VoiceControl';
 import SceneAnalysis from './components/SceneAnalysis';
 import './styles/App.css';
 
-interface Object {
+interface DetectedObject {
   name: string;
   position?: { x: number; y: number };
   confidence: number;
+  lastSeenAt: number;
 }
 
 interface Action {
   description: string;
   objects: string[];
   confidence: number;
+  timestamp: number;
 }
 
 interface Analysis {
-  objects: Object[];
+  objects: DetectedObject[];
   actions: Action[];
   sceneDescription: string;
   relationships: Array<{
@@ -29,16 +31,23 @@ interface Analysis {
   timestamp: number;
 }
 
+interface QueueStatus {
+  queueLength: number;
+  timestamp: number;
+}
+
 function App() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const frameExtractorRef = useRef<VideoFrameExtractor | null>(null);
   const reconnectTimeoutRef = useRef<number>();
-  const reconnectAttemptsRef = useRef(0);
+  const reconnectAttemptsRef = useRef<number>(0);
   const maxReconnectAttempts = 5;
+  const frameProcessingTimeoutRef = useRef<number>();
 
   const connectSocket = useCallback(() => {
     try {
@@ -61,9 +70,10 @@ function App() {
         reconnectAttemptsRef.current = 0;
       });
 
-      newSocket.on('disconnect', (reason) => {
+      newSocket.on('disconnect', (reason: string) => {
         console.log('❌ Disconnected:', reason);
         setIsConnected(false);
+        setQueueStatus(null);
         
         if (reason === 'io server disconnect') {
           console.log('🔄 Server initiated disconnect, attempting reconnect...');
@@ -71,9 +81,10 @@ function App() {
         }
       });
 
-      newSocket.on('connect_error', (err) => {
+      newSocket.on('connect_error', (err: Error) => {
         console.error('❌ Connection error:', err.message);
         setError(`Connection error: ${err.message}`);
+        setQueueStatus(null);
         
         if (reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current++;
@@ -91,10 +102,19 @@ function App() {
         setIsProcessing(false);
       });
 
+      newSocket.on('queue-status', (status: QueueStatus) => {
+        console.log('📋 Queue status:', status);
+        setQueueStatus(status);
+      });
+
       newSocket.on('error', (err: { message: string }) => {
         console.error('❌ Server error:', err.message);
         setError(err.message);
         setIsProcessing(false);
+
+        if (frameProcessingTimeoutRef.current) {
+          window.clearTimeout(frameProcessingTimeoutRef.current);
+        }
       });
 
       newSocket.on('voice-response', (response: { response: string; timestamp: number }) => {
@@ -104,6 +124,9 @@ function App() {
       setSocket(newSocket);
 
       return () => {
+        if (frameProcessingTimeoutRef.current) {
+          window.clearTimeout(frameProcessingTimeoutRef.current);
+        }
         newSocket.close();
       };
     } catch (err) {
@@ -126,7 +149,6 @@ function App() {
   useEffect(() => {
     const initializeVideo = async () => {
       try {
-        // Initialize frame extractor
         frameExtractorRef.current = new VideoFrameExtractor({
           targetFps: 2,
           width: 640,
@@ -136,13 +158,17 @@ function App() {
 
         await frameExtractorRef.current.initialize();
 
-        // Set up frame handler
-        frameExtractorRef.current.onFrame(async (frame) => {
+        frameExtractorRef.current.onFrame(async (frame: { id: string; data: string; timestamp: number }) => {
           if (!socket?.connected || isProcessing) return;
           
           try {
             setIsProcessing(true);
             socket.emit('video-frame', frame);
+
+            frameProcessingTimeoutRef.current = window.setTimeout(() => {
+              setIsProcessing(false);
+              setError('Frame processing timeout. The server took too long to respond.');
+            }, 10000);
           } catch (err) {
             console.error('❌ Error sending frame:', err);
             setError(`Failed to send frame: ${err instanceof Error ? err.message : String(err)}`);
@@ -150,7 +176,6 @@ function App() {
           }
         });
 
-        // Start frame extraction
         frameExtractorRef.current.start();
         console.log('📹 Video processing started');
 
@@ -165,6 +190,9 @@ function App() {
     }
 
     return () => {
+      if (frameProcessingTimeoutRef.current) {
+        window.clearTimeout(frameProcessingTimeoutRef.current);
+      }
       frameExtractorRef.current?.dispose();
     };
   }, [isConnected, socket]);
@@ -188,12 +216,23 @@ function App() {
     ? `Reconnecting (${reconnectAttemptsRef.current}/${maxReconnectAttempts})...`
     : 'Disconnected';
 
+  const queueInfo = queueStatus 
+    ? `Queue: ${queueStatus.queueLength} frame${queueStatus.queueLength !== 1 ? 's' : ''}`
+    : '';
+
   return (
     <div className="app">
       <header className="app-header">
         <h1>Real-time Video Assistant</h1>
-        <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
-          Status: {connectionStatus}
+        <div className="status-container">
+          <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
+            Status: {connectionStatus}
+          </div>
+          {queueStatus && (
+            <div className="queue-status">
+              {queueInfo}
+            </div>
+          )}
         </div>
       </header>
 
@@ -208,7 +247,11 @@ function App() {
             />
             {isProcessing && (
               <div className="processing-indicator">
-                Processing...
+                <div className="spinner"></div>
+                <span>Processing frame...</span>
+                {queueStatus && queueStatus.queueLength > 0 && (
+                  <span className="queue-info">{queueInfo}</span>
+                )}
               </div>
             )}
           </div>

@@ -6,7 +6,7 @@ interface Frame {
   timestamp: number;
 }
 
-interface Object {
+interface DetectedObject {
   name: string;
   position?: { x: number; y: number };
   confidence: number;
@@ -20,8 +20,20 @@ interface Action {
   timestamp: number;
 }
 
+interface ParsedAction {
+  description?: string;
+  objects?: string[];
+  confidence?: number;
+}
+
+interface ParsedRelationship {
+  object1?: string;
+  object2?: string;
+  relationship?: string;
+}
+
 interface AnalysisResult {
-  objects: Object[];
+  objects: DetectedObject[];
   actions: Action[];
   sceneDescription: string;
   relationships: Array<{
@@ -33,7 +45,7 @@ interface AnalysisResult {
 }
 
 interface ProcessingContext {
-  recentObjects: Object[];
+  recentObjects: DetectedObject[];
   recentActions: Action[];
   sceneDescription?: string;
   lastProcessedTimestamp: number;
@@ -46,6 +58,7 @@ export class GeminiProcessor {
   private apiKey: string;
   private readonly MAX_CONTEXT_FRAMES = 5;
   private readonly OBJECT_MEMORY_DURATION = 10000; // 10 seconds
+  private readonly MODEL_NAME = 'gemini-1.5-flash';
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
@@ -57,21 +70,13 @@ export class GeminiProcessor {
     };
     
     const genAI = new GoogleGenerativeAI(this.apiKey);
-    this.model = genAI.getGenerativeModel({ model: "gemini-pro-vision" });
+    this.model = genAI.getGenerativeModel({ model: this.MODEL_NAME });
   }
 
-  /**
-   * Process a video frame using Gemini API
-   */
   public async processFrame(frame: Frame): Promise<AnalysisResult> {
     try {
-      // Update context window
       this.updateContextWindow(frame);
-      
-      // Create prompt with temporal context
       const prompt = this.createAnalysisPrompt();
-
-      // Prepare parts for Gemini API
       const parts: Part[] = [
         { text: prompt },
         ...this.context.contextWindow.map(frame => ({
@@ -82,14 +87,10 @@ export class GeminiProcessor {
         }))
       ];
 
-      // Generate content with Gemini
       const result = await this.model.generateContent(parts);
       const response = await result.response;
       const analysis = this.parseGeminiResponse(response.text());
-      
-      // Update context with new information
       this.updateContext(analysis);
-
       return analysis;
     } catch (error) {
       console.error('Error processing frame with Gemini:', error);
@@ -97,35 +98,10 @@ export class GeminiProcessor {
     }
   }
 
-  /**
-   * Generate a response to a voice command based on current context
-   */
   public async generateVoiceResponse(command: string): Promise<string> {
     try {
-      // Format prompt with command and context
-      const prompt = `
-        Command: "${command}"
-        
-        Current scene context:
-        ${this.context.sceneDescription || 'No scene description available'}
-        
-        Recent objects in view:
-        ${this.context.recentObjects.map(obj => 
-          `- ${obj.name} (last seen ${Date.now() - obj.lastSeenAt}ms ago)`
-        ).join('\n')}
-        
-        Recent actions:
-        ${this.context.recentActions.map(action => 
-          `- ${action.description} (${action.objects.join(', ')})`
-        ).join('\n')}
-        
-        Please provide a natural response to the user's command, taking into account
-        the current scene context, visible objects, and recent actions.
-      `;
-
+      const prompt = this.createVoicePrompt(command);
       const parts: Part[] = [{ text: prompt }];
-
-      // Generate content with Gemini
       const result = await this.model.generateContent(parts);
       const response = await result.response;
       return response.text();
@@ -135,12 +111,9 @@ export class GeminiProcessor {
     }
   }
 
-  /**
-   * Create a prompt for Gemini that includes temporal context
-   */
   private createAnalysisPrompt(): string {
     const recentObjectsStr = this.context.recentObjects
-      .map(obj => `${obj.name} was last seen ${Date.now() - obj.lastSeenAt}ms ago`)
+      .map(obj => `${obj.name} was seen ${(Date.now() - obj.lastSeenAt) / 1000}s ago`)
       .join('. ');
 
     const recentActionsStr = this.context.recentActions
@@ -171,30 +144,112 @@ export class GeminiProcessor {
     `;
   }
 
-  /**
-   * Parse the response from Gemini into a structured format
-   */
+  private createVoicePrompt(command: string): string {
+    return `
+      Command: "${command}"
+      
+      Current scene context:
+      ${this.context.sceneDescription || 'No scene description available'}
+      
+      Recent objects in view:
+      ${this.context.recentObjects.map(obj => 
+        `- ${obj.name} (seen ${(Date.now() - obj.lastSeenAt) / 1000}s ago)`
+      ).join('\n')}
+      
+      Recent actions:
+      ${this.context.recentActions.map(action => 
+        `- ${action.description} (${action.objects.join(', ')})`
+      ).join('\n')}
+      
+      Please provide a natural response to the user's command, taking into account
+      the current scene context, visible objects, and recent actions.
+    `;
+  }
+
   private parseGeminiResponse(response: string): AnalysisResult {
     try {
-      // Extract JSON from response (it might be wrapped in markdown code blocks)
-      const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || [null, response];
-      const jsonStr = jsonMatch[1];
+      const cleanJsonStr = this.extractAndCleanJson(response);
+      const parsed = JSON.parse(cleanJsonStr);
+      const currentTime = Date.now();
+
+      const validatedResponse = {
+        objects: Array.isArray(parsed.objects) ? parsed.objects : [],
+        actions: Array.isArray(parsed.actions) ? parsed.actions : [],
+        sceneDescription: typeof parsed.sceneDescription === 'string' 
+          ? parsed.sceneDescription 
+          : 'No description available',
+        relationships: Array.isArray(parsed.relationships) ? parsed.relationships : [],
+        timestamp: currentTime
+      };
+
+      const objects = validatedResponse.objects.map((obj: DetectedObject) => ({
+        name: String(obj.name || 'Unknown Object'),
+        position: obj.position || undefined,
+        confidence: Number(obj.confidence) || 0.5,
+        lastSeenAt: currentTime
+      }));
       
-      const parsed = JSON.parse(jsonStr);
-      
+      const actions = validatedResponse.actions.map((action: ParsedAction) => ({
+        description: String(action.description || 'Unknown Action'),
+        objects: Array.isArray(action.objects) ? action.objects.map(String) : [],
+        confidence: Number(action.confidence) || 0.5,
+        timestamp: currentTime
+      }));
+
+      const relationships = validatedResponse.relationships.map((rel: ParsedRelationship) => ({
+        object1: String(rel.object1 || 'Unknown Object'),
+        object2: String(rel.object2 || 'Unknown Object'),
+        relationship: String(rel.relationship || 'near')
+      }));
+
       return {
-        ...parsed,
-        timestamp: Date.now()
+        ...validatedResponse,
+        objects,
+        actions,
+        relationships,
+        timestamp: currentTime
       };
     } catch (error) {
       console.error('Error parsing Gemini response:', error);
-      throw new Error('Failed to parse Gemini response');
+      return {
+        objects: [],
+        actions: [],
+        sceneDescription: 'Failed to analyze scene',
+        relationships: [],
+        timestamp: Date.now()
+      };
     }
   }
 
-  /**
-   * Update context window with new frame
-   */
+  private extractAndCleanJson(text: string): string {
+    try {
+      const jsonMatch = text.match(/```(?:json)?\n([\s\S]*?)\n```/);
+      let jsonStr = jsonMatch ? jsonMatch[1] : text;
+
+      jsonStr = jsonStr.trim();
+
+      if (!jsonStr.startsWith('{')) {
+        jsonStr = '{' + jsonStr;
+      }
+      if (!jsonStr.endsWith('}')) {
+        jsonStr = jsonStr + '}';
+      }
+
+      jsonStr = jsonStr.replace(/\\([^"\\\/bfnrtu])/g, '$1');
+
+      jsonStr = jsonStr
+        .replace(/,\s*([}\]])/g, '$1')
+        .replace(/([{,])\s*}/g, '}')
+        .replace(/\[\s*]/g, '[]')
+        .replace(/undefined/g, 'null');
+
+      return jsonStr;
+    } catch (error) {
+      console.error('Error cleaning JSON:', error);
+      return '{"objects":[],"actions":[],"sceneDescription":"Error parsing response","relationships":[]}';
+    }
+  }
+
   private updateContextWindow(frame: Frame): void {
     this.context.contextWindow.push(frame);
     if (this.context.contextWindow.length > this.MAX_CONTEXT_FRAMES) {
@@ -202,13 +257,9 @@ export class GeminiProcessor {
     }
   }
 
-  /**
-   * Update the processing context with new information
-   */
   private updateContext(analysis: AnalysisResult): void {
     const currentTime = Date.now();
 
-    // Update object positions and timestamps
     analysis.objects.forEach(obj => {
       const existingObj = this.context.recentObjects.find(o => o.name === obj.name);
       if (existingObj) {
@@ -223,7 +274,6 @@ export class GeminiProcessor {
       }
     });
 
-    // Add new actions
     if (analysis.actions) {
       this.context.recentActions.push(
         ...analysis.actions.map(action => ({
@@ -233,28 +283,19 @@ export class GeminiProcessor {
       );
     }
 
-    // Remove old objects and actions
     this.context.recentObjects = this.context.recentObjects.filter(
       obj => currentTime - obj.lastSeenAt < this.OBJECT_MEMORY_DURATION
     );
 
-    this.context.recentActions = this.context.recentActions.slice(-10); // Keep last 10 actions
-
-    // Update scene description
+    this.context.recentActions = this.context.recentActions.slice(-10);
     this.context.sceneDescription = analysis.sceneDescription;
     this.context.lastProcessedTimestamp = currentTime;
   }
 
-  /**
-   * Get the current context
-   */
   public getContext(): ProcessingContext {
     return { ...this.context };
   }
 
-  /**
-   * Clear the current context
-   */
   public clearContext(): void {
     this.context = {
       recentObjects: [],
