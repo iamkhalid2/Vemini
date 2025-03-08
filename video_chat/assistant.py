@@ -42,6 +42,8 @@ class VideoChatAssistant:
         self.should_stream_audio = False  # Flag to control audio streaming
         self.has_introduced = False  # Flag to track if the assistant has introduced itself
         self.is_processing_voice = False  # Flag to track if we're currently processing voice
+        self.interrupt_requested = False  # Flag to track if user wants to interrupt
+        self.prompt_lock = asyncio.Lock()  # Lock to synchronize prompt updates
         
         # Initialize API client
         self.client = genai.Client(http_options={"api_version": config.API_VERSION})
@@ -62,21 +64,30 @@ class VideoChatAssistant:
         logger.info("Text input handler started")
         
         while True:
-            # Only allow text input when not listening for voice
-            listening_status = "[Listening for voice... Please speak clearly] > " if self.listening else "message > "
-            processing_status = "[Processing voice... Please wait] > " if self.is_processing_voice else ""
-            responding_status = "[Assistant is responding... Please wait] > " if self.is_responding else ""
-            
-            # Determine which status to show
-            if self.is_processing_voice:
-                prompt = processing_status
-            elif self.is_responding:
-                prompt = responding_status
-            else:
-                prompt = listening_status
+            async with self.prompt_lock:
+                # Only allow text input when not listening for voice
+                listening_status = "[Listening for voice... Please speak clearly] > " if self.listening else "message > "
+                processing_status = "[Processing voice... Please wait] > " if self.is_processing_voice else ""
+                responding_status = "[Assistant is responding... Type anything to interrupt] > " if self.is_responding else ""
                 
+                # Determine which status to show
+                if self.is_processing_voice:
+                    prompt = processing_status
+                elif self.is_responding:
+                    prompt = responding_status
+                else:
+                    prompt = listening_status
+                    
             try:
                 text = await asyncio.to_thread(input, prompt)
+                
+                # Check if this is an interruption while the assistant is responding
+                if self.is_responding and text.strip():
+                    logger.info("User interruption detected")
+                    self.interrupt_requested = True
+                    # Wait a moment for the interruption to be processed
+                    await asyncio.sleep(0.5)
+                    continue
                 
                 # Toggle voice recognition
                 if text.lower() == "voice on":
@@ -110,9 +121,10 @@ class VideoChatAssistant:
                 
                 # Only process if there's actual input and we're not already processing/responding
                 if text.strip() and not self.is_processing_voice and not self.is_responding:
-                    # Mark that we're actively responding to a user query
-                    self.is_responding = True
-                    self.should_stream_audio = True
+                    async with self.prompt_lock:
+                        # Mark that we're actively responding to a user query
+                        self.is_responding = True
+                        self.should_stream_audio = True
                     
                     # Process text input
                     await self._process_input(text)
@@ -149,7 +161,29 @@ class VideoChatAssistant:
             logger.debug(f"Sent text to model: {text}")
         except Exception as e:
             logger.error(f"Error sending text to model: {e}")
-            self.is_responding = False  # Reset the flag if there's an error
+            async with self.prompt_lock:
+                self.is_responding = False  # Reset the flag if there's an error
+            
+    async def handle_interruption(self):
+        """Handle user interruption while assistant is responding."""
+        logger.info("Handling interruption request")
+        
+        # Clear any pending audio
+        self.audio.clear_audio_buffer()
+        
+        # Reset response flags
+        async with self.prompt_lock:
+            self.is_responding = False
+            self.should_stream_audio = False
+        
+        # Wait a moment for things to settle
+        await asyncio.sleep(0.5)
+        
+        # Reset the interrupt flag
+        self.interrupt_requested = False
+        
+        # Print a message to indicate the interruption was processed
+        print("\nInterrupted. Ready for new input.")
             
     async def voice_recognition_loop(self):
         """Background task to continuously listen for voice commands."""
@@ -161,7 +195,8 @@ class VideoChatAssistant:
                 continue
                 
             # Mark as processing voice to prevent overlapping operations
-            self.is_processing_voice = True
+            async with self.prompt_lock:
+                self.is_processing_voice = True
             
             # No timeout - wait until speech starts
             success, result = await self.audio.listen_for_speech(timeout=None)
@@ -172,8 +207,9 @@ class VideoChatAssistant:
                 print(f"\nYou said: {text}")
                 
                 # Mark that we're actively responding to a user query
-                self.is_responding = True
-                self.should_stream_audio = True
+                async with self.prompt_lock:
+                    self.is_responding = True
+                    self.should_stream_audio = True
                 
                 # Process the voice input the same way as text
                 await self._process_input(text)
@@ -182,7 +218,8 @@ class VideoChatAssistant:
                 self.listening = True
             
             # Done processing voice
-            self.is_processing_voice = False
+            async with self.prompt_lock:
+                self.is_processing_voice = False
             await asyncio.sleep(0.5)
                 
     async def listen_audio(self):
@@ -196,6 +233,10 @@ class VideoChatAssistant:
             return
             
         while True:
+            # Check for interruption requests
+            if self.interrupt_requested:
+                await self.handle_interruption()
+                
             # We only need to stream microphone audio when actively in a conversation
             # This helps prevent unwanted background noise from triggering the model
             if self.should_stream_audio:
@@ -211,13 +252,25 @@ class VideoChatAssistant:
         
         while True:
             try:
-                msg = await self.out_queue.get()
+                # Use get_nowait with a fallback to avoid blocking when interrupts happen
+                try:
+                    msg = self.out_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    await asyncio.sleep(0.1)
+                    continue
+                    
+                # Check for interruption
+                if self.interrupt_requested:
+                    self.out_queue.task_done()
+                    continue
+                
                 # Only send data if we're actively responding or it's a visual input
                 if self.is_responding or msg.get("mime_type", "").startswith("image/"):
                     await self.session.send(input=msg)
                 self.out_queue.task_done()
             except Exception as e:
                 logger.error(f"Error sending real-time data: {e}")
+                await asyncio.sleep(0.1)
                 
     async def receive_audio(self):
         """Background task to read from the websocket and store audio chunks."""
@@ -230,6 +283,10 @@ class VideoChatAssistant:
                 response_complete = False
                 
                 async for response in turn:
+                    # Check for interruption
+                    if self.interrupt_requested:
+                        break
+                        
                     if data := response.data:
                         # If this is the first chunk of a response, clear any old data
                         if not response_started:
@@ -247,8 +304,8 @@ class VideoChatAssistant:
                     if hasattr(response, "end_of_turn") and response.end_of_turn:
                         response_complete = True
                         
-                # Response is complete
-                if response_started:
+                # Response is complete or was interrupted
+                if response_started or self.interrupt_requested:
                     # Wait a little bit for any final audio chunks to be processed
                     if response_complete:
                         await asyncio.sleep(0.5)  # Small wait to ensure all audio is buffered
@@ -258,19 +315,25 @@ class VideoChatAssistant:
                         self.has_introduced = True
                     
                     # Turn off active response flag to stop listening until next user input
-                    if response_complete:
-                        self.is_responding = False
-                        self.should_stream_audio = False
+                    if response_complete or self.interrupt_requested:
+                        async with self.prompt_lock:
+                            self.is_responding = False
+                            self.should_stream_audio = False
                     
                         # Re-enable voice recognition after response is complete
                         if self.last_transcription:
                             self.listening = True
+                            
+                    # If this was an interruption, print a newline to separate the output
+                    if self.interrupt_requested:
+                        print()
                     
             except Exception as e:
                 logger.error(f"Error receiving audio: {e}")
                 # Make sure flags are reset in case of an error
-                self.is_responding = False
-                self.should_stream_audio = False
+                async with self.prompt_lock:
+                    self.is_responding = False
+                    self.should_stream_audio = False
                 
     async def play_audio(self):
         """Play received audio data using buffering for smoother output."""
@@ -287,6 +350,13 @@ class VideoChatAssistant:
         
         while True:
             try:
+                # Check for interruption
+                if self.interrupt_requested:
+                    # Stop playing audio immediately
+                    self.audio.clear_audio_buffer()
+                    await asyncio.sleep(0.1)
+                    continue
+                    
                 # Check if there's audio in the buffer to play
                 if self.audio.audio_buffer:
                     await self.audio.play_buffered_audio(stream)
@@ -310,6 +380,7 @@ class VideoChatAssistant:
             print("- Type 'voice off' or 'q' during voice mode to deactivate voice recognition") 
             print("- Type 'use camera' to use webcam for visual input")
             print("- Type 'use screen' to use screen capture for visual input")
+            print("- Type anything while the assistant is speaking to interrupt")
             print("- Type 'q' to quit the application")
             
             logger.info(f"Connecting to model: {self.model}")
