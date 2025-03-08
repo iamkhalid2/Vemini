@@ -1,1 +1,5 @@
 quickstarts
+myenv
+video_chat/__pycache__
+.env
+logs
