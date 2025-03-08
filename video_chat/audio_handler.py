@@ -25,7 +25,14 @@ class AudioHandler:
         self.audio_stream = None
         self.pya = pyaudio.PyAudio()
         self.audio_buffer = []  # Buffer for smoothing audio playback
-        self.buffer_size = 10  # Number of chunks to buffer before playback
+        self.buffer_size = config.RESPONSE_BUFFER_SIZE  # Using config for buffer size
+        
+        # Speech detection parameters - improved for better detection
+        self.energy_threshold = 300  # Default energy threshold for speech detection
+        self.dynamic_energy_threshold = True  # Dynamically adjust for ambient noise
+        self.pause_threshold = 1.0  # Seconds of non-speaking audio before a phrase is considered complete
+        self.phrase_threshold = 0.3  # Minimum seconds of speaking audio before we consider the speaking audio a phrase
+        self.non_speaking_duration = 0.8  # Seconds of non-speaking audio to keep on both sides of recording
         
         # Initialize microphone
         self.setup_microphone()
@@ -36,17 +43,25 @@ class AudioHandler:
             self.microphone = sr.Microphone()
             with self.microphone as source:
                 logger.info("Calibrating microphone for ambient noise... Please wait.")
-                self.recognizer.adjust_for_ambient_noise(source, duration=2)
-                logger.info("Microphone calibration complete!")
+                # More thorough calibration
+                self.recognizer.adjust_for_ambient_noise(source, duration=3)
+                # Apply calibrated values to our instance
+                self.energy_threshold = self.recognizer.energy_threshold
+                # Add a buffer to the energy threshold to reduce false triggers
+                self.recognizer.energy_threshold = self.energy_threshold * 1.2
+                logger.info(f"Microphone calibration complete! Energy threshold: {self.energy_threshold}")
             return True
         except Exception as e:
             logger.error(f"Error initializing microphone: {e}")
             logger.warning("Voice recognition will be disabled. You can use text input instead.")
             return False
             
-    async def listen_for_speech(self, timeout=config.DEFAULT_TIMEOUT):
+    async def listen_for_speech(self, timeout=None):
         """
-        Listen for speech and transcribe it.
+        Listen for speech and transcribe it. Improved to wait for complete phrases.
+        
+        Args:
+            timeout: Maximum number of seconds to wait for speech to start. None means wait indefinitely.
         
         Returns:
             tuple: (success, text or error_message)
@@ -56,11 +71,29 @@ class AudioHandler:
             
         try:
             with self.microphone as source:
+                # Configure the recognizer for better speech detection
+                self.recognizer.energy_threshold = self.energy_threshold
+                self.recognizer.dynamic_energy_threshold = self.dynamic_energy_threshold
+                self.recognizer.pause_threshold = self.pause_threshold
+                self.recognizer.phrase_threshold = self.phrase_threshold
+                self.recognizer.non_speaking_duration = self.non_speaking_duration
+                
                 logger.info("Listening for speech... (Say something)")
-                audio = self.recognizer.listen(source, timeout=timeout)
+                print("\nListening... (speak clearly and I'll wait for you to finish)")
+                
+                # Listen without a timeout, but with a phrase time limit
+                # This allows the recognizer to wait for speech to begin
+                # and automatically stop when speech ends
+                audio = self.recognizer.listen(
+                    source, 
+                    timeout=timeout,  # None = wait indefinitely for speech to start
+                    phrase_time_limit=config.PHRASE_TIME_LIMIT  # Maximum duration for a single phrase
+                )
                 
             try:
                 # Recognize speech using Google Speech Recognition
+                logger.info("Recognizing speech...")
+                print("Processing your complete message...")
                 text = self.recognizer.recognize_google(audio)
                 logger.info(f"Recognized speech: {text}")
                 return True, text
@@ -71,6 +104,9 @@ class AudioHandler:
                 logger.error(f"Error with speech recognition service: {e}")
                 return False, f"Service error: {str(e)}"
                 
+        except sr.WaitTimeoutError:
+            logger.warning("No speech detected within timeout period")
+            return False, "No speech detected. Please try again."
         except Exception as e:
             logger.error(f"Error in voice recognition: {e}")
             return False, str(e)
@@ -128,7 +164,7 @@ class AudioHandler:
             
     async def play_buffered_audio(self, stream):
         """
-        Play all audio in the buffer.
+        Play all audio in the buffer with improved smoothness.
         
         Args:
             stream: Audio output stream
@@ -148,7 +184,7 @@ class AudioHandler:
             for chunk in buffer_copy:
                 await asyncio.to_thread(stream.write, chunk)
                 # Small delay between chunks for smoother playback
-                await asyncio.sleep(0.005)
+                await asyncio.sleep(config.PLAYBACK_DELAY)
                 
             return True
         except Exception as e:
@@ -156,7 +192,7 @@ class AudioHandler:
             return False
             
     async def setup_audio_output(self):
-        """Set up the audio output stream."""
+        """Set up the audio output stream with improved buffering."""
         try:
             output_stream = await asyncio.to_thread(
                 self.pya.open,
@@ -164,7 +200,7 @@ class AudioHandler:
                 channels=config.CHANNELS,
                 rate=config.RECEIVE_SAMPLE_RATE,
                 output=True,
-                frames_per_buffer=config.CHUNK_SIZE * 2,  # Larger buffer for smoother playback
+                frames_per_buffer=config.CHUNK_SIZE * 4,  # Much larger buffer for smoother playback
             )
             logger.info("Audio output stream initialized")
             return output_stream
@@ -175,6 +211,23 @@ class AudioHandler:
     def clear_audio_buffer(self):
         """Clear the audio buffer."""
         self.audio_buffer.clear()
+            
+    def recalibrate_for_ambient_noise(self, duration=2):
+        """Recalibrate the recognizer for ambient noise."""
+        if not self.microphone:
+            logger.warning("Cannot recalibrate: microphone not initialized")
+            return False
+            
+        try:
+            with self.microphone as source:
+                logger.info(f"Recalibrating for ambient noise (duration: {duration}s)...")
+                self.recognizer.adjust_for_ambient_noise(source, duration=duration)
+                self.energy_threshold = self.recognizer.energy_threshold
+                logger.info(f"Recalibration complete. New energy threshold: {self.energy_threshold}")
+                return True
+        except Exception as e:
+            logger.error(f"Error during recalibration: {e}")
+            return False
             
     def cleanup(self):
         """Clean up audio resources."""

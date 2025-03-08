@@ -41,6 +41,7 @@ class VideoChatAssistant:
         self.is_responding = False  # Flag to track if the assistant is currently responding
         self.should_stream_audio = False  # Flag to control audio streaming
         self.has_introduced = False  # Flag to track if the assistant has introduced itself
+        self.is_processing_voice = False  # Flag to track if we're currently processing voice
         
         # Initialize API client
         self.client = genai.Client(http_options={"api_version": config.API_VERSION})
@@ -62,14 +63,27 @@ class VideoChatAssistant:
         
         while True:
             # Only allow text input when not listening for voice
-            prompt = "message > " if not self.listening else "[Listening for voice... type q to stop] > "
+            listening_status = "[Listening for voice... Please speak clearly] > " if self.listening else "message > "
+            processing_status = "[Processing voice... Please wait] > " if self.is_processing_voice else ""
+            responding_status = "[Assistant is responding... Please wait] > " if self.is_responding else ""
+            
+            # Determine which status to show
+            if self.is_processing_voice:
+                prompt = processing_status
+            elif self.is_responding:
+                prompt = responding_status
+            else:
+                prompt = listening_status
+                
             try:
                 text = await asyncio.to_thread(input, prompt)
                 
                 # Toggle voice recognition
                 if text.lower() == "voice on":
                     self.listening = True
-                    print("Voice recognition activated. Speak clearly.")
+                    print("Voice recognition activated. Speak clearly when ready.")
+                    # Re-calibrate for ambient noise when turning on voice
+                    await asyncio.to_thread(self.audio.recalibrate_for_ambient_noise, 2)
                     continue
                 elif text.lower() == "voice off" or (self.listening and text.lower() == "q"):
                     self.listening = False
@@ -94,8 +108,8 @@ class VideoChatAssistant:
                     logger.info("Quit command received")
                     break
                 
-                # Only process if there's actual input
-                if text.strip():
+                # Only process if there's actual input and we're not already processing/responding
+                if text.strip() and not self.is_processing_voice and not self.is_responding:
                     # Mark that we're actively responding to a user query
                     self.is_responding = True
                     self.should_stream_audio = True
@@ -135,25 +149,27 @@ class VideoChatAssistant:
             logger.debug(f"Sent text to model: {text}")
         except Exception as e:
             logger.error(f"Error sending text to model: {e}")
+            self.is_responding = False  # Reset the flag if there's an error
             
     async def voice_recognition_loop(self):
         """Background task to continuously listen for voice commands."""
         logger.info("Voice recognition loop started")
         
         while True:
-            if not self.listening:
+            if not self.listening or self.is_processing_voice or self.is_responding:
                 await asyncio.sleep(0.5)
                 continue
                 
-            success, result = await self.audio.listen_for_speech()
+            # Mark as processing voice to prevent overlapping operations
+            self.is_processing_voice = True
+            
+            # No timeout - wait until speech starts
+            success, result = await self.audio.listen_for_speech(timeout=None)
             
             if success:
                 text = result
                 self.last_transcription = text
                 print(f"\nYou said: {text}")
-                
-                # Stop listening while processing this command
-                self.listening = False
                 
                 # Mark that we're actively responding to a user query
                 self.is_responding = True
@@ -164,7 +180,10 @@ class VideoChatAssistant:
             else:
                 # If recognition failed, continue listening
                 self.listening = True
-                await asyncio.sleep(0.5)
+            
+            # Done processing voice
+            self.is_processing_voice = False
+            await asyncio.sleep(0.5)
                 
     async def listen_audio(self):
         """Process audio from microphone to send to the model."""
@@ -208,6 +227,7 @@ class VideoChatAssistant:
             try:
                 turn = self.session.receive()
                 response_started = False
+                response_complete = False
                 
                 async for response in turn:
                     if data := response.data:
@@ -223,22 +243,34 @@ class VideoChatAssistant:
                     elif text := response.text:
                         print(text, end="")
                         
+                    # Check if we've reached the end of the turn
+                    if hasattr(response, "end_of_turn") and response.end_of_turn:
+                        response_complete = True
+                        
                 # Response is complete
                 if response_started:
+                    # Wait a little bit for any final audio chunks to be processed
+                    if response_complete:
+                        await asyncio.sleep(0.5)  # Small wait to ensure all audio is buffered
+                    
                     # Only handle intro once
                     if not self.has_introduced:
                         self.has_introduced = True
                     
                     # Turn off active response flag to stop listening until next user input
-                    self.is_responding = False
-                    self.should_stream_audio = False
+                    if response_complete:
+                        self.is_responding = False
+                        self.should_stream_audio = False
                     
-                    # Re-enable voice recognition after response is complete
-                    if self.last_transcription:
-                        self.listening = True
+                        # Re-enable voice recognition after response is complete
+                        if self.last_transcription:
+                            self.listening = True
                     
             except Exception as e:
                 logger.error(f"Error receiving audio: {e}")
+                # Make sure flags are reset in case of an error
+                self.is_responding = False
+                self.should_stream_audio = False
                 
     async def play_audio(self):
         """Play received audio data using buffering for smoother output."""
@@ -263,8 +295,8 @@ class VideoChatAssistant:
                     await asyncio.sleep(0.02)
                     
                 # After introduction, use a smaller buffer for more responsive playback
-                if self.has_introduced and self.audio.buffer_size > 8:
-                    self.audio.buffer_size = 8
+                if self.has_introduced and self.audio.buffer_size > config.RESPONSE_BUFFER_SIZE:
+                    self.audio.buffer_size = config.RESPONSE_BUFFER_SIZE
                     
             except Exception as e:
                 logger.error(f"Error playing audio: {e}")
