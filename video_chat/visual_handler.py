@@ -23,6 +23,7 @@ class VisualHandler:
     def __init__(self):
         """Initialize the visual handler."""
         self.cap = None  # Video capture device
+        self.media_source = "screen"  # Default to screen capture, alternatives: "camera"
         self.setup_video_capture()
         
     def setup_video_capture(self):
@@ -39,6 +40,31 @@ class VisualHandler:
             logger.warning("Webcam features will be disabled.")
             return False
             
+    def set_media_source(self, source):
+        """
+        Set the media source for visual input.
+        
+        Args:
+            source (str): Either "screen" or "camera"
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        if source not in ["screen", "camera"]:
+            logger.error(f"Invalid media source: {source}")
+            return False
+            
+        # If switching to camera, ensure it's available
+        if source == "camera" and (not self.cap or not self.cap.isOpened()):
+            success = self.setup_video_capture()
+            if not success:
+                logger.error("Failed to set up camera as media source")
+                return False
+                
+        self.media_source = source
+        logger.info(f"Media source set to: {source}")
+        return True
+        
     def get_frame(self):
         """
         Capture a frame from the webcam.
@@ -68,6 +94,7 @@ class VisualHandler:
             
             mime_type = "image/jpeg"
             image_bytes = image_io.read()
+            
             logger.debug("Captured frame from webcam")
             return {"mime_type": mime_type, "data": base64.b64encode(image_bytes).decode()}
         except Exception as e:
@@ -100,6 +127,18 @@ class VisualHandler:
         except Exception as e:
             logger.error(f"Error capturing screenshot: {e}")
             return None
+            
+    def get_visual_data(self):
+        """
+        Capture visual data from the current media source.
+        
+        Returns:
+            dict or None: Dictionary with mime_type and base64-encoded data, or None if failed
+        """
+        if self.media_source == "camera":
+            return self.get_frame()
+        else:  # Default to screen
+            return self.get_screenshot()
             
     def should_capture_visual(self, query):
         """

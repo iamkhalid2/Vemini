@@ -76,6 +76,19 @@ class VideoChatAssistant:
                     print("Voice recognition deactivated.")
                     continue
                     
+                # Media source selection commands
+                elif text.lower() == "use camera":
+                    success = self.visual.set_media_source("camera")
+                    if success:
+                        print("Media source set to camera. Visual queries will now use webcam.")
+                    else:
+                        print("Failed to set camera as media source. Check if webcam is connected.")
+                    continue
+                elif text.lower() == "use screen":
+                    self.visual.set_media_source("screen")
+                    print("Media source set to screen. Visual queries will now use screenshots.")
+                    continue
+                    
                 # Check for quit command
                 if text.lower() == "q":
                     logger.info("Quit command received")
@@ -110,10 +123,11 @@ class VideoChatAssistant:
             
         # Check if we need visual context
         if self.visual.should_capture_visual(text):
-            visual_data = self.visual.get_screenshot()
+            visual_data = self.visual.get_visual_data()
             if visual_data:
                 await self.out_queue.put(visual_data)
-                logger.info("Added visual context from screen")
+                source_type = "camera" if self.visual.media_source == "camera" else "screen"
+                logger.info(f"Added visual context from {source_type}")
                 
         # Send the text to the model
         try:
@@ -261,7 +275,9 @@ class VideoChatAssistant:
         try:
             print("Starting Video Chat Assistant...")
             print("- Type 'voice on' to activate voice recognition")
-            print("- Type 'voice off' or 'q' during voice mode to deactivate voice recognition")
+            print("- Type 'voice off' or 'q' during voice mode to deactivate voice recognition") 
+            print("- Type 'use camera' to use webcam for visual input")
+            print("- Type 'use screen' to use screen capture for visual input")
             print("- Type 'q' to quit the application")
             
             logger.info(f"Connecting to model: {self.model}")
