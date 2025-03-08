@@ -113,17 +113,9 @@ vemini/
 │   └── visual_handler.py    # Screen and camera capture functionality
 └── logs/                    # Log files
 ```
-
-## 📈 Future Improvements
-
-- [ ] Add more voice commands for control
-- [ ] Implement user profiles and personalization
-- [ ] Add support for additional languages
-- [ ] Extend visual analysis capabilities
-
 ## 📜 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License
 
 ## 🙏 Acknowledgements
 
