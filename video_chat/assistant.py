@@ -8,6 +8,7 @@ import asyncio
 import logging
 import sys
 import traceback
+import time
 
 from google import genai
 
@@ -37,6 +38,9 @@ class VideoChatAssistant:
         self.model = model
         self.listening = start_with_voice
         self.last_transcription = ""
+        self.is_responding = False  # Flag to track if the assistant is currently responding
+        self.should_stream_audio = False  # Flag to control audio streaming
+        self.has_introduced = False  # Flag to track if the assistant has introduced itself
         
         # Initialize API client
         self.client = genai.Client(http_options={"api_version": config.API_VERSION})
@@ -76,9 +80,15 @@ class VideoChatAssistant:
                 if text.lower() == "q":
                     logger.info("Quit command received")
                     break
+                
+                # Only process if there's actual input
+                if text.strip():
+                    # Mark that we're actively responding to a user query
+                    self.is_responding = True
+                    self.should_stream_audio = True
                     
-                # Process text input
-                await self._process_input(text)
+                    # Process text input
+                    await self._process_input(text)
                 
             except EOFError:
                 logger.error("EOF encountered in input")
@@ -131,6 +141,10 @@ class VideoChatAssistant:
                 # Stop listening while processing this command
                 self.listening = False
                 
+                # Mark that we're actively responding to a user query
+                self.is_responding = True
+                self.should_stream_audio = True
+                
                 # Process the voice input the same way as text
                 await self._process_input(text)
             else:
@@ -149,9 +163,14 @@ class VideoChatAssistant:
             return
             
         while True:
-            audio_data = await self.audio.read_audio_chunk()
-            if audio_data:
-                await self.out_queue.put(audio_data)
+            # We only need to stream microphone audio when actively in a conversation
+            # This helps prevent unwanted background noise from triggering the model
+            if self.should_stream_audio:
+                audio_data = await self.audio.read_audio_chunk()
+                if audio_data:
+                    await self.out_queue.put(audio_data)
+            else:
+                await asyncio.sleep(0.1)
                 
     async def send_realtime(self):
         """Send queued media data to the model."""
@@ -160,7 +179,9 @@ class VideoChatAssistant:
         while True:
             try:
                 msg = await self.out_queue.get()
-                await self.session.send(input=msg)
+                # Only send data if we're actively responding or it's a visual input
+                if self.is_responding or msg.get("mime_type", "").startswith("image/"):
+                    await self.session.send(input=msg)
                 self.out_queue.task_done()
             except Exception as e:
                 logger.error(f"Error sending real-time data: {e}")
@@ -172,25 +193,41 @@ class VideoChatAssistant:
         while True:
             try:
                 turn = self.session.receive()
+                response_started = False
+                
                 async for response in turn:
                     if data := response.data:
-                        self.audio_in_queue.put_nowait(data)
+                        # If this is the first chunk of a response, clear any old data
+                        if not response_started:
+                            response_started = True
+                            self.audio.clear_audio_buffer()
+                            
+                        # Only buffer audio if the assistant is responding to a query
+                        if self.is_responding or not self.has_introduced:
+                            buffer_full = await self.audio.buffer_audio(data)
+                            
                     elif text := response.text:
                         print(text, end="")
                         
-                # When turn is complete, reset the queue by emptying it
-                while not self.audio_in_queue.empty():
-                    self.audio_in_queue.get_nowait()
+                # Response is complete
+                if response_started:
+                    # Only handle intro once
+                    if not self.has_introduced:
+                        self.has_introduced = True
                     
-                # Start listening for voice again after response is complete
-                if self.last_transcription:
-                    self.listening = True
+                    # Turn off active response flag to stop listening until next user input
+                    self.is_responding = False
+                    self.should_stream_audio = False
+                    
+                    # Re-enable voice recognition after response is complete
+                    if self.last_transcription:
+                        self.listening = True
                     
             except Exception as e:
                 logger.error(f"Error receiving audio: {e}")
                 
     async def play_audio(self):
-        """Play received audio data."""
+        """Play received audio data using buffering for smoother output."""
         logger.info("Audio playback handler started")
         
         # Set up the audio output stream
@@ -198,14 +235,26 @@ class VideoChatAssistant:
         if not stream:
             logger.error("Failed to set up audio output stream")
             return
-            
+        
+        # Larger buffer size for initial introduction to ensure smooth playback
+        self.audio.buffer_size = 15
+        
         while True:
             try:
-                bytestream = await self.audio_in_queue.get()
-                await self.audio.play_audio(stream, bytestream)
-                self.audio_in_queue.task_done()
+                # Check if there's audio in the buffer to play
+                if self.audio.audio_buffer:
+                    await self.audio.play_buffered_audio(stream)
+                else:
+                    # Reduce polling rate when no audio to play
+                    await asyncio.sleep(0.02)
+                    
+                # After introduction, use a smaller buffer for more responsive playback
+                if self.has_introduced and self.audio.buffer_size > 8:
+                    self.audio.buffer_size = 8
+                    
             except Exception as e:
                 logger.error(f"Error playing audio: {e}")
+                await asyncio.sleep(0.1)  # Avoid tight loop on error
                 
     async def run(self):
         """Main execution loop."""
@@ -224,7 +273,10 @@ class VideoChatAssistant:
                 self.audio_in_queue = asyncio.Queue()
                 self.out_queue = asyncio.Queue(maxsize=config.MAX_QUEUE_SIZE)
                 
-                # Welcome message
+                # For the welcome message only, allow audio streaming
+                self.should_stream_audio = True
+                
+                # Welcome message - only on first run
                 await session.send(input=config.INITIAL_PROMPT, end_of_turn=True)
                 logger.info("Sent initial prompt to model")
                 

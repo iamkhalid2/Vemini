@@ -8,6 +8,8 @@ import asyncio
 import logging
 import pyaudio
 import speech_recognition as sr
+import numpy as np
+import time
 
 from . import config
 
@@ -22,6 +24,8 @@ class AudioHandler:
         self.microphone = None
         self.audio_stream = None
         self.pya = pyaudio.PyAudio()
+        self.audio_buffer = []  # Buffer for smoothing audio playback
+        self.buffer_size = 10  # Number of chunks to buffer before playback
         
         # Initialize microphone
         self.setup_microphone()
@@ -103,6 +107,16 @@ class AudioHandler:
             logger.error(f"Error reading audio: {e}")
             return None
             
+    async def buffer_audio(self, audio_data):
+        """
+        Add audio data to buffer for smoother playback.
+        
+        Returns:
+            bool: True if buffer is full and ready for playback
+        """
+        self.audio_buffer.append(audio_data)
+        return len(self.audio_buffer) >= self.buffer_size
+            
     async def play_audio(self, stream, audio_data):
         """Play audio data through the given stream."""
         try:
@@ -112,19 +126,55 @@ class AudioHandler:
             logger.error(f"Error playing audio: {e}")
             return False
             
+    async def play_buffered_audio(self, stream):
+        """
+        Play all audio in the buffer.
+        
+        Args:
+            stream: Audio output stream
+        
+        Returns:
+            bool: True if successful
+        """
+        try:
+            if not self.audio_buffer:
+                return False
+                
+            # Use a local copy and clear the main buffer to avoid blocking
+            buffer_copy = self.audio_buffer.copy()
+            self.audio_buffer.clear()
+            
+            # Play all audio chunks in the buffer
+            for chunk in buffer_copy:
+                await asyncio.to_thread(stream.write, chunk)
+                # Small delay between chunks for smoother playback
+                await asyncio.sleep(0.005)
+                
+            return True
+        except Exception as e:
+            logger.error(f"Error playing buffered audio: {e}")
+            return False
+            
     async def setup_audio_output(self):
         """Set up the audio output stream."""
         try:
-            return await asyncio.to_thread(
+            output_stream = await asyncio.to_thread(
                 self.pya.open,
                 format=self.pya.get_format_from_width(config.FORMAT_INT16 // 8),
                 channels=config.CHANNELS,
                 rate=config.RECEIVE_SAMPLE_RATE,
                 output=True,
+                frames_per_buffer=config.CHUNK_SIZE * 2,  # Larger buffer for smoother playback
             )
+            logger.info("Audio output stream initialized")
+            return output_stream
         except Exception as e:
             logger.error(f"Error setting up audio output: {e}")
             return None
+            
+    def clear_audio_buffer(self):
+        """Clear the audio buffer."""
+        self.audio_buffer.clear()
             
     def cleanup(self):
         """Clean up audio resources."""
