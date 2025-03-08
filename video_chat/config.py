@@ -10,7 +10,7 @@ RECEIVE_SAMPLE_RATE = 24000  # Output audio sampling rate
 CHUNK_SIZE = 1024  # Audio processing chunk size
 
 # Gemini model selection
-MODEL = "gemini-2.0-flash"  # Default model
+MODEL = "gemini-2.0-flash-exp"  # Default model - must use the experimental version for Live API
 API_VERSION = "v1alpha"  # API version for Live API
 MODEL_CONFIG = {"response_modalities": ["AUDIO"]}  # Default Gemini config
 
