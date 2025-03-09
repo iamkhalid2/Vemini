@@ -1,4 +1,4 @@
-# Vemini: Voice-Enabled Multimodal AI Assistant 🎙️👁️
+# Vemini: Voice-Enabled Multimodal Context Aware AI
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/downloads/)
 [![Gemini 2.0](https://img.shields.io/badge/Gemini-2.0-green)](https://ai.google.dev/)
