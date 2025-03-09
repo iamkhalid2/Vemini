@@ -84,7 +84,7 @@ myenv\Scripts\activate
 source myenv/bin/activate
 
 # Start the FastAPI server
-uvicorn api.index:app --reload --port 8000
+python start_api.py
 ```
 
 ## Usage
