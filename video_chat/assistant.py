@@ -9,6 +9,9 @@ import logging
 import sys
 import traceback
 import time
+import base64
+import io
+from typing import Optional, Dict, Any
 
 from google import genai
 
@@ -425,3 +428,95 @@ class VideoChatAssistant:
             self.visual.cleanup()
             if hasattr(self, 'audio') and self.audio:
                 self.audio.cleanup()
+                
+    # New methods for web API support
+    
+    async def process_web_request(self, text: str, visual_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Process a web request and return a response.
+        
+        Args:
+            text (str): The user's text input
+            visual_data (Optional[Dict]): Visual data if available
+            
+        Returns:
+            Dict[str, Any]: Response with text and optional audio
+        """
+        logger.info(f"Processing web request: {text[:50]}...")
+        
+        # Create response dict
+        response = {
+            "text": "",
+            "audio": None
+        }
+        
+        try:
+            # Setup a new session for this request
+            async with self.client.aio.live.connect(model=self.model, config=config.MODEL_CONFIG) as session:
+                # Send visual data first if available
+                if visual_data:
+                    await session.send(input=visual_data)
+                    logger.info("Sent visual data to model")
+                
+                # Send the text input
+                await session.send(input=text, end_of_turn=True)
+                logger.info("Sent text to model")
+                
+                # Process the response
+                turn = session.receive()
+                full_text = ""
+                audio_data = []
+                
+                async for chunk in turn:
+                    if data := chunk.data:
+                        # Collect audio data
+                        audio_data.append(data)
+                    
+                    if text := chunk.text:
+                        full_text += text
+                
+                # Set the response text
+                response["text"] = full_text
+                
+                # Process audio if available
+                if audio_data:
+                    # Combine audio data and convert to base64
+                    combined_audio = b''.join(audio_data)
+                    response["audio"] = base64.b64encode(combined_audio).decode('utf-8')
+            
+            return response
+        
+        except Exception as e:
+            logger.error(f"Error in process_web_request: {str(e)}")
+            response["text"] = f"Error: {str(e)}"
+            return response
+    
+    async def process_websocket_message(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process a message received over WebSocket.
+        
+        Args:
+            data (Dict): The message data containing text and optional media
+            
+        Returns:
+            Dict: Response data
+        """
+        try:
+            text = data.get("text", "")
+            visual_data = None
+            
+            # Process visual data if provided
+            if data.get("with_visual") and data.get("visual_data"):
+                try:
+                    # Convert base64 to image data
+                    image_bytes = base64.b64decode(data["visual_data"])
+                    visual_data = self.visual.process_image_bytes(image_bytes)
+                except Exception as e:
+                    logger.error(f"Error processing visual data: {str(e)}")
+            
+            # Process the request
+            return await self.process_web_request(text, visual_data)
+            
+        except Exception as e:
+            logger.error(f"Error in process_websocket_message: {str(e)}")
+            return {"error": str(e)}

@@ -160,6 +160,29 @@ class VisualHandler:
                 return True
         return False
         
+    def process_image_bytes(self, image_bytes):
+        """
+        Process external image bytes for use with the model.
+        
+        Args:
+            image_bytes (bytes): Raw image bytes
+            
+        Returns:
+            dict: Message with image data for the model
+        """
+        try:
+            # Create message for the model
+            msg = {
+                "mime_type": "image/jpeg",
+                "data": image_bytes
+            }
+            
+            logger.debug("Processed external image bytes")
+            return msg
+        except Exception as e:
+            logger.error(f"Error processing image bytes: {e}")
+            return None
+
     def cleanup(self):
         """Clean up visual resources."""
         logger.info("Cleaning up visual resources")
