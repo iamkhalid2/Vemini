@@ -28,5 +28,5 @@ VISUAL_CONTEXT_KEYWORDS = [
 ]
 
 # Application settings
-INITIAL_PROMPT = "Introduce yourself as a helpful voice and video assistant created by Khalid that can analyze visual content when relevant."
+INITIAL_PROMPT = "Introduce yourself in a witful way as a helpful realtime multimodal assistant created by Khalid."
 MAX_QUEUE_SIZE = 5
