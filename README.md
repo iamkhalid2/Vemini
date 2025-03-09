@@ -1,124 +1,123 @@
-# Vemini: Voice-Enabled Multimodal Context Aware AI
+# Vemini - Video Chat Assistant Web Application
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/downloads/)
-[![Gemini 2.0](https://img.shields.io/badge/Gemini-2.0-green)](https://ai.google.dev/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+Vemini is a web-based version of a video chat assistant that uses Google's Gemini API. This application provides both text and visual interactions with the assistant through a modern React frontend and FastAPI backend.
 
-## 📋 Overview
-
-Vemini is a powerful, interactive voice and visual-enabled AI assistant built on Google's Gemini 2.0 API. It provides seamless voice interaction, real-time screen and camera analysis, and natural dialogue capabilities. Perfect for hands-free computing, accessibility applications, and interactive AI experiences.
-
-## ✨ Features
-
-- **🎙️ Voice Recognition**: Natural voice interaction with ambient noise calibration
-- **🔄 Multi-Modal Input**: Process both voice commands and text inputs
-- **👁️ Visual Analysis**: Analyze content from:
-  - 🖥️ Screen captures (default)
-  - 📷 Webcam feed
-- **🔊 Real-time Audio Response**: Natural voice responses with buffer management for smooth playback
-- **⚡ Interruption Capability**: Interrupt the assistant at any time with new commands
-- **🧠 Context-aware Visual Analysis**: Automatically detects when visual context is needed
-- **🔌 Flexible Media Selection**: Switch between camera and screen capture as needed
-
-## 🛠️ Technology Stack
-
-- **Google Gemini 2.0 API**: Advanced multimodal AI model
-- **Python 3.9+**: Core programming language
-- **Speech Recognition**: Google Speech Recognition API for voice transcription
-- **PyAudio**: Audio stream handling for input/output
-- **OpenCV (cv2)**: Camera capture and image processing
-- **MSS**: Screen capture functionality
-- **PIL**: Image processing and manipulation
-- **Asyncio**: Asynchronous programming for responsive interactions
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Python 3.9 or higher
-- Google API key with access to Gemini API
-- Webcam (optional for camera analysis)
-- Microphone (for voice interaction)
-
-### Installation
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/iamkhalid2/vemini.git
-   cd vemini
-   ```
-
-2. Create and activate a virtual environment:
-   ```bash
-   python -m venv myenv
-   # On Windows
-   myenv\Scripts\activate
-   # On macOS/Linux
-   source myenv/bin/activate
-   ```
-
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. Set up your Google API key:
-   ```bash
-   # On Windows
-   set GOOGLE_API_KEY=your_api_key_here
-   # On macOS/Linux
-   export GOOGLE_API_KEY=your_api_key_here
-   ```
-
-### Running Vemini
-
-Run the main application:
-```bash
-python main.py
-```
-
-## 💬 Usage
-
-Once Vemini is running, you can interact with it using the following commands:
-
-- Type your messages directly in the terminal
-- Say **"voice on"** to activate voice recognition
-- Say **"voice off"** or type **"q"** in voice mode to deactivate
-- Type **"use camera"** to switch to webcam for visual analysis
-- Type **"use screen"** to switch to screen capture for visual analysis
-- Type anything while the assistant is speaking to interrupt it
-- Type **"q"** to quit the application
-
-### Visual Analysis Triggers
-
-The assistant automatically detects when visual context is needed based on keywords like:
-- "See", "Look", "Show", "Screen", "Camera", "Picture", etc.
-
-Example queries:
-- "What can you see on my screen?"
-- "Look at this image and describe it"
-- "What's showing on my webcam right now?"
-
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 vemini/
-├── main.py                  # Entry point for the application
-├── requirements.txt         # Dependencies
-├── video_chat/              # Core module
+├── api/                  # FastAPI backend
+│   └── index.py          # Main API endpoints
+├── client/               # React frontend
+│   ├── public/           # Static files
+│   └── src/              # React source code
+│       ├── App.js        # Main React component
+│       ├── index.js      # React entry point
+│       └── index.css     # Styles with Tailwind CSS
+├── video_chat/           # Core assistant functionality
 │   ├── __init__.py
-│   ├── assistant.py         # Main assistant coordinator
-│   ├── audio_handler.py     # Audio processing and speech recognition
-│   ├── config.py            # Configuration settings
-│   └── visual_handler.py    # Screen and camera capture functionality
-└── logs/                    # Log files
+│   ├── assistant.py      # Main assistant class
+│   ├── audio_handler.py  # Audio processing
+│   ├── config.py         # Configuration settings
+│   └── visual_handler.py # Visual processing
+├── main.py               # CLI entry point (original app)
+├── requirements.txt      # Python dependencies
+├── vercel.json           # Vercel deployment config
+└── README.md             # This file
 ```
-## 📜 License
 
-This project is licensed under the MIT License
+## Prerequisites
 
-## 🙏 Acknowledgements
+- Python 3.8+ with pip
+- Node.js 14+ with npm
+- Google API key for Gemini
 
-- Google Gemini API for the underlying AI model
-- Speech Recognition library contributors
-- OpenCV and PIL developers
+## Setup Instructions
+
+### 1. Environment Setup
+
+Create a `.env` file in the project root with your Google API key:
+
+```
+GOOGLE_API_KEY=your_api_key_here
+MODEL=gemini-pro
+```
+
+### 2. Python Environment
+
+```bash
+# Create a virtual environment
+python -m venv myenv
+
+# Activate the virtual environment
+# On Windows:
+myenv\Scripts\activate
+# On macOS/Linux:
+source myenv/bin/activate
+
+# Install Python dependencies
+pip install -r requirements.txt
+```
+
+### 3. Frontend Setup
+
+```bash
+# Navigate to client directory
+cd client
+
+# Install dependencies
+npm install
+
+# Start development server
+npm start
+```
+
+### 4. Backend Setup
+
+In a separate terminal:
+
+```bash
+# Activate the virtual environment if not already activated
+# On Windows:
+myenv\Scripts\activate
+# On macOS/Linux:
+source myenv/bin/activate
+
+# Start the FastAPI server
+uvicorn api.index:app --reload --port 8000
+```
+
+## Usage
+
+1. Open your browser to http://localhost:3000
+2. Use the interface to interact with the assistant:
+   - Type text messages in the input field
+   - Toggle camera or screen capture using the buttons in the header
+   - Submit your queries with or without visual context
+   - Listen to audio responses from the assistant
+
+## Features
+
+- **Text Chat**: Exchange messages with the AI assistant
+- **Visual Input**: Capture images from your webcam or screenshots
+- **Audio Responses**: Listen to the assistant's voice responses
+- **Responsive Design**: Works on desktop and mobile devices
+
+## Deployment to Vercel
+
+1. Push your code to a GitHub repository
+2. Connect your Vercel account to GitHub
+3. Import your repository in Vercel
+4. Set the following environment variables in Vercel:
+   - `GOOGLE_API_KEY`: Your Gemini API key
+   - `MODEL`: The Gemini model to use (e.g., "gemini-pro")
+5. Deploy
+
+## License
+
+[MIT License](LICENSE)
+
+## Acknowledgments
+
+- Built with [FastAPI](https://fastapi.tiangolo.com/) and [React](https://reactjs.org/)
+- Powered by [Google Gemini API](https://ai.google.dev/)

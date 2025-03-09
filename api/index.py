@@ -41,8 +41,7 @@ logger = logging.getLogger("api")
 
 # Check for API key
 if not os.environ.get('GOOGLE_API_KEY'):
-    logger.error("GOOGLE_API_KEY environment variable is not set")
-    raise ValueError("GOOGLE_API_KEY environment variable is not set")
+    logger.warning("GOOGLE_API_KEY environment variable is not set")
 
 # Create FastAPI app
 app = FastAPI(title="Video Chat Assistant API")
@@ -79,16 +78,24 @@ async def root():
 async def process_message(request: MessageRequest):
     """Process a text message with optional visual data"""
     try:
+        # Check for API key
+        if not os.environ.get('GOOGLE_API_KEY'):
+            raise HTTPException(status_code=500, detail="GOOGLE_API_KEY environment variable is not set")
+
         # Initialize the assistant with default model
         assistant = VideoChatAssistant(model=os.environ.get('MODEL', config.MODEL))
         
         # Process visual data if provided
         visual_data = None
         if request.with_visual and request.visual_data:
-            # Convert base64 to image bytes
-            image_bytes = base64.b64decode(request.visual_data)
-            # Use visual handler to process the image
-            visual_data = visual_handler.process_image_bytes(image_bytes)
+            try:
+                # Convert base64 to image bytes
+                image_bytes = base64.b64decode(request.visual_data)
+                # Use visual handler to process the image
+                visual_data = visual_handler.process_image_bytes(image_bytes)
+            except Exception as e:
+                logger.error(f"Error processing visual data: {str(e)}")
+                # Continue without visual data
         
         # Process the message
         response = await assistant.process_web_request(
@@ -102,10 +109,16 @@ async def process_message(request: MessageRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # WebSocket connection for real-time communication
-@app.websocket("/ws")
+@app.websocket("/api/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     try:
+        # Check for API key
+        if not os.environ.get('GOOGLE_API_KEY'):
+            await websocket.send_text(json.dumps({"error": "GOOGLE_API_KEY environment variable is not set"}))
+            await websocket.close()
+            return
+
         # Initialize the assistant with default model
         assistant = VideoChatAssistant(model=os.environ.get('MODEL', config.MODEL))
         
@@ -123,4 +136,7 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.info("WebSocket client disconnected")
     except Exception as e:
         logger.error(f"WebSocket error: {str(e)}")
-        await websocket.send_text(json.dumps({"error": str(e)}))
+        try:
+            await websocket.send_text(json.dumps({"error": str(e)}))
+        except:
+            pass
