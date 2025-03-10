@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import Webcam from 'react-webcam';
-import { CameraIcon, PhotoIcon, ArrowUpCircleIcon, SpeakerWaveIcon } from '@heroicons/react/24/outline';
+import { CameraIcon, PhotoIcon, ArrowUpCircleIcon, SpeakerWaveIcon, MicrophoneIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 // API base URL - adjust for development/production
 const API_URL = process.env.NODE_ENV === 'production' 
   ? '/api' 
   : 'http://localhost:8000/api';
+
+// Initial system prompt (same as CLI version)
+const INITIAL_PROMPT = "Introduce yourself in a witful way as a helpful realtime multimodal assistant created by Khalid.";
 
 function App() {
   const [messages, setMessages] = useState([]);
@@ -15,15 +18,153 @@ function App() {
   const [mediaSource, setMediaSource] = useState('none'); // 'none', 'camera', 'screen'
   const [capturedImage, setCapturedImage] = useState(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [isVoiceModeActive, setIsVoiceModeActive] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   
   const webcamRef = useRef(null);
   const messagesEndRef = useRef(null);
   const audioRef = useRef(null);
+  const recognitionRef = useRef(null);
+  
+  // Initialize speech recognition
+  const initSpeechRecognition = () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      console.error('Speech recognition not supported in this browser');
+      return false;
+    }
+    
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    
+    recognitionRef.current = new SpeechRecognition();
+    recognitionRef.current.continuous = false;
+    recognitionRef.current.interimResults = false;
+    recognitionRef.current.lang = 'en-US';
+    
+    recognitionRef.current.onstart = () => {
+      setIsListening(true);
+    };
+    
+    recognitionRef.current.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setInputText(transcript);
+      
+      // If voice mode is active, automatically submit after getting result
+      if (isVoiceModeActive) {
+        handleSubmitWithText(transcript);
+      }
+    };
+    
+    recognitionRef.current.onerror = (event) => {
+      console.error('Speech recognition error', event.error);
+      setIsListening(false);
+    };
+    
+    recognitionRef.current.onend = () => {
+      setIsListening(false);
+      // If voice mode is active, start listening again
+      if (isVoiceModeActive) {
+        setTimeout(() => {
+          startListening();
+        }, 1000);
+      }
+    };
+    
+    return true;
+  };
+  
+  // Start listening for speech
+  const startListening = () => {
+    if (!recognitionRef.current) {
+      if (!initSpeechRecognition()) {
+        alert('Speech recognition is not supported in your browser.');
+        return;
+      }
+    }
+    
+    try {
+      recognitionRef.current.start();
+    } catch (error) {
+      console.error('Error starting speech recognition', error);
+    }
+  };
+  
+  // Stop listening for speech
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+  };
+  
+  // Toggle voice mode
+  const toggleVoiceMode = () => {
+    const newState = !isVoiceModeActive;
+    setIsVoiceModeActive(newState);
+    
+    if (newState) {
+      startListening();
+    } else {
+      stopListening();
+    }
+  };
   
   // Scroll to bottom of messages when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+  
+  // Initialize speech recognition when component mounts
+  useEffect(() => {
+    initSpeechRecognition();
+    
+    // Cleanup
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
+  
+  // Initialize with system prompt on first load
+  useEffect(() => {
+    if (!isInitialized && !messages.length) {
+      setIsInitialized(true);
+      setIsLoading(true);
+      
+      // Send initial system prompt
+      axios.post(`${API_URL}/message`, { text: INITIAL_PROMPT })
+        .then(response => {
+          const assistantMessage = {
+            id: Date.now(),
+            sender: 'assistant',
+            text: response.data.text,
+            audio: response.data.audio
+          };
+          
+          setMessages([assistantMessage]);
+          
+          // Play audio if available
+          if (response.data.audio && audioRef.current) {
+            const audioSrc = `data:audio/wav;base64,${response.data.audio}`;
+            audioRef.current.src = audioSrc;
+            audioRef.current.play().catch(error => {
+              console.error('Error playing audio:', error);
+            });
+            setIsPlayingAudio(true);
+          }
+        })
+        .catch(error => {
+          console.error('Error sending initial prompt:', error);
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
+    }
+  }, [isInitialized, messages]);
   
   // Function to capture image from webcam
   const captureImage = () => {
@@ -36,16 +177,39 @@ function App() {
   // Function to capture screenshot
   const captureScreenshot = async () => {
     try {
-      // In a real app, you would implement screen capture here
-      // For now, we'll just simulate it with a placeholder
-      alert('In a real app, this would capture your screen. This feature requires additional setup.');
+      const stream = await navigator.mediaDevices.getDisplayMedia({ 
+        video: { 
+          cursor: "always",
+          displaySurface: "monitor" 
+        }
+      });
       
-      // If you implement screen capture:
-      // const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      // ... process the stream to get an image ...
-      // setCapturedImage(imageDataUrl);
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      
+      await new Promise(resolve => {
+        video.onloadedmetadata = resolve;
+      });
+      
+      video.play();
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      // Get screenshot as data URL
+      const screenshot = canvas.toDataURL('image/jpeg');
+      setCapturedImage(screenshot);
+      
+      // Stop all tracks
+      stream.getTracks().forEach(track => track.stop());
+      
     } catch (error) {
       console.error('Error capturing screenshot:', error);
+      alert('Failed to capture screen. Please ensure you have granted screen sharing permissions.');
     }
   };
   
@@ -54,17 +218,15 @@ function App() {
     setCapturedImage(null);
   };
   
-  // Function to handle form submission
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!inputText.trim() && !capturedImage) return;
+  // Function to handle form submission with specific text
+  const handleSubmitWithText = async (text) => {
+    if (!text.trim() && !capturedImage) return;
     
     // Add user message to chat
     const userMessage = {
       id: Date.now(),
       sender: 'user',
-      text: inputText,
+      text: text,
       image: capturedImage
     };
     
@@ -75,7 +237,7 @@ function App() {
     try {
       // Prepare request data
       const requestData = {
-        text: inputText,
+        text: text,
         with_visual: !!capturedImage,
         visual_data: capturedImage ? capturedImage.split(',')[1] : null // Remove the data:image/jpeg;base64, prefix
       };
@@ -120,6 +282,57 @@ function App() {
     }
   };
   
+  // Function to handle form submission
+  const handleSubmit = async (e) => {
+    if (e) e.preventDefault();
+    await handleSubmitWithText(inputText);
+  };
+  
+  // Handle special commands like in the CLI version
+  const handleSpecialCommands = (text) => {
+    const lowerText = text.toLowerCase();
+    
+    if (lowerText === 'voice on') {
+      setIsVoiceModeActive(true);
+      startListening();
+      return true;
+    } else if (lowerText === 'voice off' || (isVoiceModeActive && lowerText === 'q')) {
+      setIsVoiceModeActive(false);
+      stopListening();
+      return true;
+    } else if (lowerText === 'use camera') {
+      setMediaSource(mediaSource === 'camera' ? 'none' : 'camera');
+      return true;
+    } else if (lowerText === 'use screen') {
+      setMediaSource(mediaSource === 'screen' ? 'none' : 'screen');
+      return true;
+    } else if (lowerText === 'q') {
+      // In CLI this would quit, but we'll just clear the chat
+      setMessages([]);
+      return true;
+    }
+    
+    return false;
+  };
+  
+  // Handle text input change
+  const handleTextChange = (e) => {
+    const text = e.target.value;
+    setInputText(text);
+    
+    // Check for special commands when Enter is pressed
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      
+      if (handleSpecialCommands(text)) {
+        setInputText('');
+        return;
+      }
+      
+      handleSubmit();
+    }
+  };
+  
   return (
     <div className="flex flex-col min-h-screen bg-gray-100">
       {/* Header */}
@@ -141,41 +354,77 @@ function App() {
             >
               <PhotoIcon className="h-6 w-6" />
             </button>
+            <button 
+              onClick={toggleVoiceMode}
+              className={`p-2 rounded-full ${isVoiceModeActive ? 'bg-primary-400 animate-pulse' : 'bg-primary-700'} hover:bg-primary-500 transition-colors`}
+              title={isVoiceModeActive ? "Disable voice mode" : "Enable voice mode"}
+            >
+              <MicrophoneIcon className="h-6 w-6" />
+            </button>
           </div>
         </div>
       </header>
       
       {/* Main content */}
       <main className="flex-grow container mx-auto p-4 flex flex-col">
-        {/* Video preview area */}
-        {mediaSource === 'camera' && !capturedImage && (
-          <div className="mb-4 rounded-lg overflow-hidden shadow-lg bg-gray-800">
-            <Webcam
-              ref={webcamRef}
-              audio={false}
-              screenshotFormat="image/jpeg"
-              className="w-full h-64 object-cover"
-            />
-            <div className="p-3 bg-gray-700 flex justify-between">
+        {/* Visual canvas area - displays webcam or screen capture UI */}
+        <div className="mb-4 rounded-lg overflow-hidden shadow-lg bg-gray-800">
+          <div className="flex items-center justify-center p-2 bg-gray-700 text-white">
+            <h2 className="text-lg font-medium">Visual Input</h2>
+            {mediaSource !== 'none' && (
               <button 
-                className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors"
-                onClick={captureImage}
-              >
-                Capture Image
-              </button>
-              <button 
-                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
                 onClick={() => setMediaSource('none')}
+                className="ml-4 bg-gray-600 p-1 rounded-full hover:bg-gray-500 transition-colors"
+                title="Close visual input"
               >
-                Cancel
+                <XMarkIcon className="h-5 w-5" />
               </button>
-            </div>
+            )}
           </div>
-        )}
-        
-        {mediaSource === 'screen' && !capturedImage && (
-          <div className="mb-4 rounded-lg overflow-hidden shadow-lg bg-gray-800 p-6">
-            <div className="text-center text-white p-6">
+          
+          {mediaSource === 'none' && !capturedImage && (
+            <div className="flex flex-col items-center justify-center p-8 text-white text-center">
+              <div className="flex space-x-6 mb-4">
+                <button 
+                  onClick={() => setMediaSource('camera')}
+                  className="flex flex-col items-center p-4 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                >
+                  <CameraIcon className="h-12 w-12 mb-2" />
+                  <span>See Camera</span>
+                </button>
+                <button 
+                  onClick={() => setMediaSource('screen')}
+                  className="flex flex-col items-center p-4 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                >
+                  <PhotoIcon className="h-12 w-12 mb-2" />
+                  <span>See Screen</span>
+                </button>
+              </div>
+              <p className="text-gray-400">Select a visual input source</p>
+            </div>
+          )}
+          
+          {mediaSource === 'camera' && !capturedImage && (
+            <div>
+              <Webcam
+                ref={webcamRef}
+                audio={false}
+                screenshotFormat="image/jpeg"
+                className="w-full h-64 object-cover"
+              />
+              <div className="p-3 bg-gray-700 flex justify-between">
+                <button 
+                  className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors"
+                  onClick={captureImage}
+                >
+                  Capture Image
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {mediaSource === 'screen' && !capturedImage && (
+            <div className="p-6 text-center text-white">
               <PhotoIcon className="h-20 w-20 mx-auto mb-4" />
               <p className="mb-4">Click the button below to capture your screen</p>
               <button 
@@ -185,35 +434,57 @@ function App() {
                 Capture Screenshot
               </button>
             </div>
-          </div>
-        )}
-        
-        {/* Captured image display */}
-        {capturedImage && (
-          <div className="mb-4 rounded-lg overflow-hidden shadow-lg bg-gray-800">
-            <img 
-              src={capturedImage} 
-              alt="Captured" 
-              className="w-full h-64 object-contain"
-            />
-            <div className="p-3 bg-gray-700 flex justify-between">
-              <button 
-                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
-                onClick={clearImage}
-              >
-                Clear Image
-              </button>
+          )}
+          
+          {/* Captured image display */}
+          {capturedImage && (
+            <div>
+              <img 
+                src={capturedImage} 
+                alt="Captured" 
+                className="w-full h-64 object-contain"
+              />
+              <div className="p-3 bg-gray-700 flex justify-between">
+                <button 
+                  className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+                  onClick={clearImage}
+                >
+                  Clear Image
+                </button>
+              </div>
             </div>
+          )}
+        </div>
+        
+        {/* Voice mode status indicator */}
+        {isVoiceModeActive && (
+          <div className={`mb-4 p-3 rounded-lg bg-primary-50 border border-primary-300 text-primary-700 flex items-center justify-between ${isListening ? 'animate-pulse' : ''}`}>
+            <div className="flex items-center">
+              <MicrophoneIcon className="h-5 w-5 mr-2" />
+              {isListening ? 'Listening... Speak clearly' : 'Voice mode active - Click the microphone to speak'}
+            </div>
+            <button
+              onClick={toggleVoiceMode}
+              className="bg-primary-100 hover:bg-primary-200 p-1 rounded text-xs"
+            >
+              Turn Off
+            </button>
           </div>
         )}
         
         {/* Messages area */}
-        <div className="flex-grow mt-4 bg-white rounded-lg shadow-md p-4 overflow-y-auto" style={{ maxHeight: '60vh' }}>
+        <div className="flex-grow bg-white rounded-lg shadow-md p-4 overflow-y-auto" style={{ maxHeight: '60vh' }}>
           {messages.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
               <h3 className="text-xl font-medium mb-2">Video Chat Assistant</h3>
-              <p>Send a message to start a conversation!</p>
-              <p className="mt-2 text-sm">You can also capture images or screenshots to include with your message.</p>
+              <p>Initializing... The assistant will introduce itself shortly.</p>
+              <p className="mt-2 text-sm">You can use these commands just like in the CLI version:</p>
+              <ul className="mt-2 text-sm list-disc list-inside">
+                <li>'voice on' - Activate voice recognition</li>
+                <li>'voice off' - Deactivate voice recognition</li>
+                <li>'use camera' - Switch to camera input</li>
+                <li>'use screen' - Switch to screen capture</li>
+              </ul>
             </div>
           ) : (
             <div className="space-y-4">
@@ -286,24 +557,39 @@ function App() {
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              disabled={isLoading}
+              onKeyDown={handleTextChange}
+              disabled={isLoading || isListening}
               className="flex-grow p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="Type a message..."
+              placeholder={isListening ? "Listening..." : isVoiceModeActive ? "Voice mode active (or type a message)" : "Type a message..."}
             />
-            <button
-              type="submit"
-              disabled={isLoading || (!inputText.trim() && !capturedImage)}
-              className={`p-2 rounded-lg ${
-                isLoading || (!inputText.trim() && !capturedImage)
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-primary-600 text-white hover:bg-primary-700'
-              }`}
-            >
-              <ArrowUpCircleIcon className="h-6 w-6" />
-            </button>
+            {isVoiceModeActive && !isListening ? (
+              <button
+                type="button"
+                onClick={startListening}
+                className="p-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700"
+              >
+                <MicrophoneIcon className="h-6 w-6" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={isLoading || (!inputText.trim() && !capturedImage) || isListening}
+                className={`p-2 rounded-lg ${
+                  isLoading || (!inputText.trim() && !capturedImage) || isListening
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-primary-600 text-white hover:bg-primary-700'
+                }`}
+              >
+                <ArrowUpCircleIcon className="h-6 w-6" />
+              </button>
+            )}
           </form>
           <div className="mt-2 text-xs text-gray-500 text-center">
-            <p>Tip: Type your message or capture an image first, then submit</p>
+            <p>
+              {isVoiceModeActive 
+                ? "Voice mode active: Speak clearly or type commands like 'voice off'" 
+                : "Tip: Type 'voice on' to activate voice recognition"}
+            </p>
           </div>
         </div>
       </footer>
