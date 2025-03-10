@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import Webcam from 'react-webcam';
-import { CameraIcon, PhotoIcon, ArrowUpCircleIcon, SpeakerWaveIcon, MicrophoneIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { Mic, Video, Share2, Send, X } from 'lucide-react';
 
 // API base URL - adjust for development/production
 const API_URL = process.env.NODE_ENV === 'production' 
@@ -21,6 +21,7 @@ function App() {
   const [isVoiceModeActive, setIsVoiceModeActive] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   
   const webcamRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -218,6 +219,21 @@ function App() {
     setCapturedImage(null);
   };
   
+  // Handle option selection (Talk, Show, Share)
+  const handleOptionSelect = (option) => {
+    setShowChat(true);
+    
+    if (option === 'talk') {
+      setIsVoiceModeActive(true);
+      startListening();
+    } else if (option === 'show') {
+      setMediaSource('camera');
+    } else if (option === 'share') {
+      setMediaSource('screen');
+      captureScreenshot();
+    }
+  };
+  
   // Function to handle form submission with specific text
   const handleSubmitWithText = async (text) => {
     if (!text.trim() && !capturedImage) return;
@@ -319,12 +335,14 @@ function App() {
   const handleTextChange = (e) => {
     const text = e.target.value;
     setInputText(text);
-    
+  };
+  
+  const handleKeyPress = (e) => {
     // Check for special commands when Enter is pressed
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       
-      if (handleSpecialCommands(text)) {
+      if (handleSpecialCommands(inputText)) {
         setInputText('');
         return;
       }
@@ -332,89 +350,92 @@ function App() {
       handleSubmit();
     }
   };
-  
-  return (
-    <div className="flex flex-col min-h-screen bg-gray-100">
-      {/* Header */}
-      <header className="bg-primary-600 text-white p-4 shadow-md">
-        <div className="container mx-auto flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Video Chat Assistant</h1>
-          <div className="flex space-x-3">
-            <button 
-              onClick={() => setMediaSource(mediaSource === 'camera' ? 'none' : 'camera')}
-              className={`p-2 rounded-full ${mediaSource === 'camera' ? 'bg-primary-400' : 'bg-primary-700'} hover:bg-primary-500 transition-colors`}
-              title="Toggle camera"
-            >
-              <CameraIcon className="h-6 w-6" />
-            </button>
-            <button 
-              onClick={() => setMediaSource(mediaSource === 'screen' ? 'none' : 'screen')}
-              className={`p-2 rounded-full ${mediaSource === 'screen' ? 'bg-primary-400' : 'bg-primary-700'} hover:bg-primary-500 transition-colors`}
-              title="Toggle screen capture"
-            >
-              <PhotoIcon className="h-6 w-6" />
-            </button>
-            <button 
-              onClick={toggleVoiceMode}
-              className={`p-2 rounded-full ${isVoiceModeActive ? 'bg-primary-400 animate-pulse' : 'bg-primary-700'} hover:bg-primary-500 transition-colors`}
-              title={isVoiceModeActive ? "Disable voice mode" : "Enable voice mode"}
-            >
-              <MicrophoneIcon className="h-6 w-6" />
-            </button>
-          </div>
-        </div>
-      </header>
+
+  // Home/Welcome screen UI
+  const WelcomeScreen = () => (
+    <div className="flex-grow flex flex-col items-center justify-center text-center px-4 space-y-6">
+      <h1 className="text-6xl font-normal mb-4">Hello Anon!</h1>
+      <p className="text-xl text-gray-300 mb-12">Interact with Vemini using text, voice, video, or screen sharing.</p>
       
-      {/* Main content */}
-      <main className="flex-grow container mx-auto p-4 flex flex-col">
-        {/* Visual canvas area - displays webcam or screen capture UI */}
-        <div className="mb-4 rounded-lg overflow-hidden shadow-lg bg-gray-800">
-          <div className="flex items-center justify-center p-2 bg-gray-700 text-white">
-            <h2 className="text-lg font-medium">Visual Input</h2>
-            {mediaSource !== 'none' && (
-              <button 
-                onClick={() => setMediaSource('none')}
-                className="ml-4 bg-gray-600 p-1 rounded-full hover:bg-gray-500 transition-colors"
-                title="Close visual input"
-              >
-                <XMarkIcon className="h-5 w-5" />
-              </button>
-            )}
+      {/* Options Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-4xl mt-8">
+        {/* Talk to Vemini */}
+        <div 
+          onClick={() => handleOptionSelect('talk')}
+          className="bg-gray-800 p-8 rounded-lg flex flex-col items-center text-center cursor-pointer hover:bg-gray-700 transition-all"
+        >
+          <div className="bg-blue-600/10 p-3 rounded-full mb-4">
+            <Mic className="text-blue-500 w-6 h-6" />
+          </div>
+          <h3 className="text-xl font-medium mb-2">Talk to Vemini</h3>
+          <p className="text-gray-400">Start a real-time conversation using your microphone.</p>
+        </div>
+        
+        {/* Show Vemini */}
+        <div 
+          onClick={() => handleOptionSelect('show')} 
+          className="bg-gray-800 p-8 rounded-lg flex flex-col items-center text-center cursor-pointer hover:bg-gray-700 transition-all"
+        >
+          <div className="bg-blue-600/10 p-3 rounded-full mb-4">
+            <Video className="text-blue-500 w-6 h-6" />
+          </div>
+          <h3 className="text-xl font-medium mb-2">Show Vemini</h3>
+          <p className="text-gray-400">Use your webcam to share what you're looking at and get real-time feedback.</p>
+        </div>
+        
+        {/* Share your screen */}
+        <div 
+          onClick={() => handleOptionSelect('share')}
+          className="bg-gray-800 p-8 rounded-lg flex flex-col items-center text-center cursor-pointer hover:bg-gray-700 transition-all"
+        >
+          <div className="bg-blue-600/10 p-3 rounded-full mb-4">
+            <Share2 className="text-blue-500 w-6 h-6" />
+          </div>
+          <h3 className="text-xl font-medium mb-2">Share your screen</h3>
+          <p className="text-gray-400">Share your screen to show Vemini what you're working on.</p>
+        </div>
+      </div>
+      
+      {/* Attribution */}
+      <div className="mt-12 text-lg text-gray-300">
+        <p>Curated with ⚡ by Khalid</p>
+      </div>
+    </div>
+  );
+
+  // Chat interface UI
+  const ChatScreen = () => (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Visual input area - only show when needed */}
+      {(mediaSource !== 'none' || capturedImage) && (
+        <div className="mb-4 bg-gray-800 rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between p-2 bg-gray-700 text-white">
+            <h2 className="text-lg font-medium">
+              {mediaSource === 'camera' ? 'Camera' : mediaSource === 'screen' ? 'Screen' : 'Visual Input'}
+            </h2>
+            <button 
+              onClick={() => {
+                setMediaSource('none');
+                clearImage();
+              }}
+              className="p-1 bg-gray-600 hover:bg-gray-500 rounded-full"
+            >
+              <X size={16} />
+            </button>
           </div>
           
-          {mediaSource === 'none' && !capturedImage && (
-            <div className="flex flex-col items-center justify-center p-8 text-white text-center">
-              <div className="flex space-x-6 mb-4">
-                <button 
-                  onClick={() => setMediaSource('camera')}
-                  className="flex flex-col items-center p-4 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-                >
-                  <CameraIcon className="h-12 w-12 mb-2" />
-                  <span>See Camera</span>
-                </button>
-                <button 
-                  onClick={() => setMediaSource('screen')}
-                  className="flex flex-col items-center p-4 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-                >
-                  <PhotoIcon className="h-12 w-12 mb-2" />
-                  <span>See Screen</span>
-                </button>
-              </div>
-              <p className="text-gray-400">Select a visual input source</p>
-            </div>
-          )}
-          
+          {/* Camera view */}
           {mediaSource === 'camera' && !capturedImage && (
             <div>
               <Webcam
                 ref={webcamRef}
                 audio={false}
                 screenshotFormat="image/jpeg"
-                className="w-full h-64 object-cover"
+                className="w-full h-48 object-cover"
               />
-              <div className="p-3 bg-gray-700 flex justify-between">
+              <div className="p-2 flex justify-center bg-gray-700">
                 <button 
-                  className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors"
+                  className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
                   onClick={captureImage}
                 >
                   Capture Image
@@ -423,12 +444,12 @@ function App() {
             </div>
           )}
           
+          {/* Screen capture prompt */}
           {mediaSource === 'screen' && !capturedImage && (
-            <div className="p-6 text-center text-white">
-              <PhotoIcon className="h-20 w-20 mx-auto mb-4" />
-              <p className="mb-4">Click the button below to capture your screen</p>
+            <div className="p-4 text-center text-white">
+              <p className="mb-3">Click the button below to capture your screen</p>
               <button 
-                className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors"
+                className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
                 onClick={captureScreenshot}
               >
                 Capture Screenshot
@@ -442,11 +463,11 @@ function App() {
               <img 
                 src={capturedImage} 
                 alt="Captured" 
-                className="w-full h-64 object-contain"
+                className="w-full max-h-48 object-contain"
               />
-              <div className="p-3 bg-gray-700 flex justify-between">
+              <div className="p-2 flex justify-center bg-gray-700">
                 <button 
-                  className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+                  className="px-3 py-1 bg-gray-500 text-white text-sm rounded hover:bg-gray-600 transition-colors"
                   onClick={clearImage}
                 >
                   Clear Image
@@ -455,145 +476,134 @@ function App() {
             </div>
           )}
         </div>
-        
-        {/* Voice mode status indicator */}
-        {isVoiceModeActive && (
-          <div className={`mb-4 p-3 rounded-lg bg-primary-50 border border-primary-300 text-primary-700 flex items-center justify-between ${isListening ? 'animate-pulse' : ''}`}>
-            <div className="flex items-center">
-              <MicrophoneIcon className="h-5 w-5 mr-2" />
-              {isListening ? 'Listening... Speak clearly' : 'Voice mode active - Click the microphone to speak'}
+      )}
+      
+      {/* Messages area */}
+      <div className="flex-grow overflow-y-auto px-1 space-y-4 mb-4">
+        {messages.length === 0 ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center text-gray-500">
+              <p>Initializing... The assistant will introduce itself shortly.</p>
+              <div className="mt-3 flex space-x-2 justify-center">
+                <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"></div>
+                <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+              </div>
             </div>
-            <button
+          </div>
+        ) : (
+          <>
+            {messages.map((message) => (
+              <div 
+                key={message.id}
+                className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div 
+                  className={`max-w-[80%] rounded-lg p-3 ${
+                    message.sender === 'user' 
+                      ? 'bg-blue-600 text-white rounded-br-none' 
+                      : message.isError 
+                        ? 'bg-red-100 text-red-700 rounded-bl-none' 
+                        : 'bg-gray-700 text-white rounded-bl-none'
+                  }`}
+                >
+                  {message.image && (
+                    <div className="mb-2">
+                      <img 
+                        src={message.image} 
+                        alt="User captured" 
+                        className="rounded max-h-40 max-w-full"
+                      />
+                    </div>
+                  )}
+                  {message.text && (
+                    <p className="whitespace-pre-wrap">{message.text}</p>
+                  )}
+                  {message.audio && (
+                    <button 
+                      className="mt-2 flex items-center text-sm text-blue-300 hover:text-blue-100"
+                      onClick={() => {
+                        if (audioRef.current) {
+                          audioRef.current.src = `data:audio/wav;base64,${message.audio}`;
+                          audioRef.current.play();
+                          setIsPlayingAudio(true);
+                        }
+                      }}
+                    >
+                      <Mic className="h-4 w-4 mr-1" />
+                      Play audio
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {isLoading && (
+              <div className="flex justify-start">
+                <div className="bg-gray-700 p-2 rounded-lg rounded-bl-none max-w-[80%]">
+                  <div className="flex space-x-2">
+                    <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"></div>
+                    <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col h-screen bg-black text-white p-4">
+      {/* Main Content */}
+      <div className="flex-grow flex flex-col overflow-hidden">
+        {!showChat ? <WelcomeScreen /> : <ChatScreen />}
+      </div>
+
+      {/* Footer Input */}
+      {showChat && (
+        <div className="mt-auto pt-4">
+          <div className="bg-gray-800 flex items-center rounded-full p-2 pr-3">
+            <button 
+              className={`p-2 ${isVoiceModeActive ? 'text-blue-500' : 'text-gray-400'} hover:text-blue-400`}
               onClick={toggleVoiceMode}
-              className="bg-primary-100 hover:bg-primary-200 p-1 rounded text-xs"
+              title={isVoiceModeActive ? "Turn off voice input" : "Turn on voice input"}
             >
-              Turn Off
+              <Mic className="w-5 h-5" />
+            </button>
+            <button 
+              className={`p-2 ${mediaSource === 'camera' ? 'text-blue-500' : 'text-gray-400'} hover:text-blue-400 mr-1`}
+              onClick={() => setMediaSource(mediaSource === 'camera' ? 'none' : 'camera')}
+              title={mediaSource === 'camera' ? "Turn off camera" : "Turn on camera"}
+            >
+              <Video className="w-5 h-5" />
+            </button>
+            <input 
+              type="text" 
+              value={inputText}
+              onChange={handleTextChange}
+              onKeyDown={handleKeyPress}
+              disabled={isLoading || isListening}
+              className="bg-transparent flex-grow outline-none ml-1 text-gray-300"
+              placeholder={isListening ? "Listening..." : "Type something..."}
+            />
+            <button 
+              onClick={handleSubmit}
+              disabled={isLoading || (!inputText.trim() && !capturedImage)}
+              className={`ml-3 p-2 ${
+                isLoading || (!inputText.trim() && !capturedImage)
+                  ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
+              } rounded-full transition-colors`}
+            >
+              <Send size={20} />
             </button>
           </div>
-        )}
-        
-        {/* Messages area */}
-        <div className="flex-grow bg-white rounded-lg shadow-md p-4 overflow-y-auto" style={{ maxHeight: '60vh' }}>
-          {messages.length === 0 ? (
-            <div className="text-center text-gray-500 py-8">
-              <h3 className="text-xl font-medium mb-2">Video Chat Assistant</h3>
-              <p>Initializing... The assistant will introduce itself shortly.</p>
-              <p className="mt-2 text-sm">You can use these commands just like in the CLI version:</p>
-              <ul className="mt-2 text-sm list-disc list-inside">
-                <li>'voice on' - Activate voice recognition</li>
-                <li>'voice off' - Deactivate voice recognition</li>
-                <li>'use camera' - Switch to camera input</li>
-                <li>'use screen' - Switch to screen capture</li>
-              </ul>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {messages.map((message) => (
-                <div 
-                  key={message.id}
-                  className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div 
-                    className={`max-w-[80%] rounded-lg p-3 ${
-                      message.sender === 'user' 
-                        ? 'bg-primary-500 text-white rounded-br-none' 
-                        : message.isError 
-                          ? 'bg-red-100 text-red-700 rounded-bl-none' 
-                          : 'bg-gray-100 text-gray-800 rounded-bl-none'
-                    }`}
-                  >
-                    {message.image && (
-                      <div className="mb-2">
-                        <img 
-                          src={message.image} 
-                          alt="User captured" 
-                          className="rounded max-h-40 max-w-full"
-                        />
-                      </div>
-                    )}
-                    {message.text && (
-                      <p className="whitespace-pre-wrap">{message.text}</p>
-                    )}
-                    {message.audio && (
-                      <button 
-                        className="mt-2 flex items-center text-sm text-primary-700 hover:text-primary-500"
-                        onClick={() => {
-                          if (audioRef.current) {
-                            audioRef.current.src = `data:audio/wav;base64,${message.audio}`;
-                            audioRef.current.play();
-                            setIsPlayingAudio(true);
-                          }
-                        }}
-                      >
-                        <SpeakerWaveIcon className="h-5 w-5 mr-1" />
-                        Play audio
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-gray-100 p-4 rounded-lg rounded-bl-none max-w-[80%]">
-                    <div className="flex space-x-2">
-                      <div className="w-3 h-3 rounded-full bg-gray-400 animate-bounce"></div>
-                      <div className="w-3 h-3 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                      <div className="w-3 h-3 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.4s' }}></div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-          )}
         </div>
-      </main>
-      
-      {/* Input form */}
-      <footer className="bg-white border-t p-4 shadow-inner">
-        <div className="container mx-auto">
-          <form onSubmit={handleSubmit} className="flex space-x-2">
-            <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={handleTextChange}
-              disabled={isLoading || isListening}
-              className="flex-grow p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder={isListening ? "Listening..." : isVoiceModeActive ? "Voice mode active (or type a message)" : "Type a message..."}
-            />
-            {isVoiceModeActive && !isListening ? (
-              <button
-                type="button"
-                onClick={startListening}
-                className="p-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700"
-              >
-                <MicrophoneIcon className="h-6 w-6" />
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={isLoading || (!inputText.trim() && !capturedImage) || isListening}
-                className={`p-2 rounded-lg ${
-                  isLoading || (!inputText.trim() && !capturedImage) || isListening
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-primary-600 text-white hover:bg-primary-700'
-                }`}
-              >
-                <ArrowUpCircleIcon className="h-6 w-6" />
-              </button>
-            )}
-          </form>
-          <div className="mt-2 text-xs text-gray-500 text-center">
-            <p>
-              {isVoiceModeActive 
-                ? "Voice mode active: Speak clearly or type commands like 'voice off'" 
-                : "Tip: Type 'voice on' to activate voice recognition"}
-            </p>
-          </div>
-        </div>
-      </footer>
-      
+      )}
+
       {/* Hidden audio element for playing responses */}
       <audio 
         ref={audioRef} 
