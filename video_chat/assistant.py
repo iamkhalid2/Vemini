@@ -480,9 +480,43 @@ class VideoChatAssistant:
                 
                 # Process audio if available
                 if audio_data:
-                    # Combine audio data and convert to base64
+                    # Combine audio data
                     combined_audio = b''.join(audio_data)
-                    response["audio"] = base64.b64encode(combined_audio).decode('utf-8')
+                    
+                    # Create a simple WAV header for PCM data
+                    # Parameters for WAV header creation
+                    channels = config.CHANNELS
+                    sample_rate = config.RECEIVE_SAMPLE_RATE
+                    bits_per_sample = 16  # From config.FORMAT_INT16
+                    
+                    # Calculate header values
+                    byte_rate = sample_rate * channels * bits_per_sample // 8
+                    block_align = channels * bits_per_sample // 8
+                    
+                    # Create WAV header
+                    header = bytearray()
+                    # RIFF header
+                    header.extend(b"RIFF")
+                    header.extend((len(combined_audio) + 36).to_bytes(4, "little"))  # File size - 8
+                    header.extend(b"WAVE")
+                    # Format chunk
+                    header.extend(b"fmt ")
+                    header.extend((16).to_bytes(4, "little"))  # Chunk size
+                    header.extend((1).to_bytes(2, "little"))  # Audio format (PCM)
+                    header.extend(channels.to_bytes(2, "little"))  # Channels
+                    header.extend(sample_rate.to_bytes(4, "little"))  # Sample rate
+                    header.extend(byte_rate.to_bytes(4, "little"))  # Byte rate
+                    header.extend(block_align.to_bytes(2, "little"))  # Block align
+                    header.extend(bits_per_sample.to_bytes(2, "little"))  # Bits per sample
+                    # Data chunk
+                    header.extend(b"data")
+                    header.extend(len(combined_audio).to_bytes(4, "little"))  # Chunk size
+                    
+                    # Combine WAV header with audio data
+                    wav_data = header + combined_audio
+                    
+                    # Encode as base64
+                    response["audio"] = base64.b64encode(wav_data).decode('utf-8')
             
             return response
         

@@ -97,7 +97,9 @@ function App() {
       if (response.data.audio && audioRef.current) {
         const audioSrc = `data:audio/wav;base64,${response.data.audio}`;
         audioRef.current.src = audioSrc;
-        audioRef.current.play();
+        audioRef.current.play().catch(error => {
+          console.error('Error playing audio:', error);
+        });
         setIsPlayingAudio(true);
       }
       
