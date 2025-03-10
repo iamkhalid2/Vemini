@@ -1,6 +1,6 @@
 # 🤖 Vemini - Realtime Multimodal Context-Aware Assistant
 
-Vemini is a cutting-edge realtime multimodal AI system that revolutionizes human-AI interaction through simultaneous processing of visual, textual, and audio input streams. Unlike conventional chatbots, Vemini maintains continuous contextual awareness across modalities, enabling it to understand complex situations as they unfold and respond with human-like comprehension in real time.
+Vemini is a cutting-edge realtime multimodal AI system that revolutionizes human-AI interaction through simultaneous processing of visual, textual, and audio input streams. Unlike conventional chatbots, Vemini maintains continuous contextual awareness across modalities, enabling it to understand complex situations as they unfold and respond with human-like comprehension in real time. 
 
 ## ✨ What Can It Do?
 
