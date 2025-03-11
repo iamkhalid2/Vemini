@@ -15,12 +15,14 @@
  */
 
 import { useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import "./App.scss";
 import { LiveAPIProvider } from "./contexts/LiveAPIContext";
 import SidePanel from "./components/side-panel/SidePanel";
 import { Altair } from "./components/altair/Altair";
 import ControlTray from "./components/control-tray/ControlTray";
 import cn from "classnames";
+import { fadeIn, scaleUp } from "./animations";
 
 const API_KEY = process.env.REACT_APP_GEMINI_API_KEY as string;
 if (typeof API_KEY !== "string") {
@@ -32,29 +34,48 @@ const uri = `wss://${host}/ws/google.ai.generativelanguage.v1alpha.GenerativeSer
 
 function App() {
   // this video reference is used for displaying the active stream, whether that is the webcam or screen capture
-  // feel free to style as you see fit
   const videoRef = useRef<HTMLVideoElement>(null);
   // either the screen capture, the video or null, if null we hide it
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
 
   return (
-    <div className="App">
+    <motion.div 
+      className="App"
+      initial="hidden"
+      animate="visible"
+      variants={fadeIn}
+    >
       <LiveAPIProvider url={uri} apiKey={API_KEY}>
         <div className="streaming-console">
           <SidePanel />
-          <main>
-            <div className="main-app-area">
+          <motion.main
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.5 }}
+          >
+            <motion.div 
+              className="main-app-area"
+              variants={scaleUp}
+              initial="hidden"
+              animate="visible"
+            >
               {/* APP goes here */}
               <Altair />
-              <video
-                className={cn("stream", {
-                  hidden: !videoRef.current || !videoStream,
-                })}
-                ref={videoRef}
-                autoPlay
-                playsInline
-              />
-            </div>
+              <AnimatePresence>
+                {videoRef.current && videoStream && (
+                  <motion.video
+                    className="stream"
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                  />
+                )}
+              </AnimatePresence>
+            </motion.div>
 
             <ControlTray
               videoRef={videoRef}
@@ -63,10 +84,10 @@ function App() {
             >
               {/* put your own buttons here */}
             </ControlTray>
-          </main>
+          </motion.main>
         </div>
       </LiveAPIProvider>
-    </div>
+    </motion.div>
   );
 }
 

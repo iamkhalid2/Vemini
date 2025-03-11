@@ -22,12 +22,44 @@ import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
 import { useLoggerStore } from "../../lib/store-logger";
 import Logger, { LoggerFilterType } from "../logger/Logger";
 import "./side-panel.scss";
+import { motion, AnimatePresence } from "framer-motion";
+import { slideInFromSide } from "../../animations";
 
 const filterOptions = [
   { value: "conversations", label: "Conversations" },
   { value: "tools", label: "Tool Use" },
   { value: "none", label: "All" },
 ];
+
+const panelVariants = {
+  open: {
+    width: "400px",
+    transition: {
+      type: "spring",
+      stiffness: 300,
+      damping: 30,
+    }
+  },
+  closed: {
+    width: "40px",
+    transition: {
+      type: "spring",
+      stiffness: 500,
+      damping: 40,
+    }
+  }
+};
+
+const contentVariants = {
+  hidden: { opacity: 0 },
+  visible: { 
+    opacity: 1,
+    transition: {
+      delay: 0.2,
+      duration: 0.3,
+    }
+  }
+};
 
 export default function SidePanel() {
   const { connected, client } = useLiveAPIContext();
@@ -64,8 +96,9 @@ export default function SidePanel() {
   }, [client, log]);
 
   const handleSubmit = () => {
+    if (!textInput.trim()) return;
+    
     client.send([{ text: textInput }]);
-
     setTextInput("");
     if (inputRef.current) {
       inputRef.current.innerText = "";
@@ -73,89 +106,146 @@ export default function SidePanel() {
   };
 
   return (
-    <div className={`side-panel ${open ? "open" : ""}`}>
+    <motion.div 
+      className={`side-panel`}
+      variants={panelVariants}
+      animate={open ? "open" : "closed"}
+      initial="closed"
+    >
       <header className="top">
-        <h2>Vemini</h2>
-        {open ? (
-          <button className="opener" onClick={() => setOpen(false)}>
+        <AnimatePresence>
+          {open && (
+            <motion.h2
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              Vemini
+            </motion.h2>
+          )}
+        </AnimatePresence>
+        <motion.button 
+          className="opener"
+          onClick={() => setOpen(!open)}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+        >
+          {open ? (
             <RiSidebarFoldLine color="#b4b8bb" />
-          </button>
-        ) : (
-          <button className="opener" onClick={() => setOpen(true)}>
+          ) : (
             <RiSidebarUnfoldLine color="#b4b8bb" />
-          </button>
-        )}
+          )}
+        </motion.button>
       </header>
-      <section className="indicators">
-        <Select
-          className="react-select"
-          classNamePrefix="react-select"
-          styles={{
-            control: (baseStyles) => ({
-              ...baseStyles,
-              background: "var(--Neutral-15)",
-              color: "var(--Neutral-90)",
-              minHeight: "33px",
-              maxHeight: "33px",
-              border: 0,
-            }),
-            option: (styles, { isFocused, isSelected }) => ({
-              ...styles,
-              backgroundColor: isFocused
-                ? "var(--Neutral-30)"
-                : isSelected
-                  ? "var(--Neutral-20)"
-                  : undefined,
-            }),
-          }}
-          defaultValue={selectedOption}
-          options={filterOptions}
-          onChange={(e) => {
-            setSelectedOption(e);
-          }}
-        />
-        <div className={cn("streaming-indicator", { connected })}>
-          {connected
-            ? `🔵${open ? " Streaming" : ""}`
-            : `⏸️${open ? " Paused" : ""}`}
-        </div>
-      </section>
-      <div className="side-panel-container" ref={loggerRef}>
-        <Logger
-          filter={(selectedOption?.value as LoggerFilterType) || "none"}
-        />
-      </div>
-      <div className={cn("input-container", { disabled: !connected })}>
-        <div className="input-content">
-          <textarea
-            className="input-area"
-            ref={inputRef}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                e.stopPropagation();
-                handleSubmit();
-              }
-            }}
-            onChange={(e) => setTextInput(e.target.value)}
-            value={textInput}
-          ></textarea>
-          <span
-            className={cn("input-content-placeholder", {
-              hidden: textInput.length,
-            })}
-          >
-            Type&nbsp;something...
-          </span>
 
-          <button
-            className="send-button material-symbols-outlined filled"
-            onClick={handleSubmit}
+      <AnimatePresence>
+        {open && (
+          <motion.section 
+            className="indicators"
+            variants={contentVariants}
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
           >
-            send
-          </button>
-        </div>
-      </div>
-    </div>
+            <Select
+              className="react-select"
+              classNamePrefix="react-select"
+              styles={{
+                control: (baseStyles) => ({
+                  ...baseStyles,
+                  background: "var(--Neutral-15)",
+                  color: "var(--Neutral-90)",
+                  minHeight: "33px",
+                  maxHeight: "33px",
+                  border: 0,
+                }),
+                option: (styles, { isFocused, isSelected }) => ({
+                  ...styles,
+                  backgroundColor: isFocused
+                    ? "var(--Neutral-30)"
+                    : isSelected
+                      ? "var(--Neutral-20)"
+                      : undefined,
+                }),
+              }}
+              defaultValue={selectedOption}
+              placeholder="Filter logs..."
+              options={filterOptions}
+              onChange={(e) => {
+                setSelectedOption(e);
+              }}
+            />
+            
+            <motion.div 
+              className={cn("streaming-indicator", { connected })}
+              initial={{ width: "30px" }}
+              animate={{ width: open ? "136px" : "30px" }}
+              transition={{ duration: 0.3 }}
+            >
+              {connected
+                ? <span>🔵{open ? " Streaming" : ""}</span>
+                : <span>⏸️{open ? " Paused" : ""}</span>}
+            </motion.div>
+          </motion.section>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div 
+            className="side-panel-container" 
+            ref={loggerRef}
+            variants={slideInFromSide}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+          >
+            <Logger
+              filter={(selectedOption?.value as LoggerFilterType) || "none"}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div 
+            className={cn("input-container", { disabled: !connected })}
+            variants={contentVariants}
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
+          >
+            <div className="input-content">
+              <textarea
+                className="input-area"
+                ref={inputRef}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSubmit();
+                  }
+                }}
+                onChange={(e) => setTextInput(e.target.value)}
+                value={textInput}
+                placeholder="Type something..."
+              ></textarea>
+              
+              <motion.button
+                className="send-button material-symbols-outlined filled"
+                onClick={handleSubmit}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                disabled={!textInput.trim()}
+              >
+                send
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }

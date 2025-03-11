@@ -50,11 +50,30 @@
   --Red-500: #ff4600;
   --Red-600: #e03c00;
   --Red-700: #bd3000;
+  
+  /* Card and UI element styling */
+  --card-border-radius: 16px;
+  --button-border-radius: 18px;
+  --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  
+  /* Animation speeds */
+  --transition-fast: 0.2s;
+  --transition-medium: 0.3s;
+  --transition-slow: 0.5s;
 }
 
+/* Base styles */
 body {
   font-family: "Space Mono", monospace;
   background: var(--Neutral-30);
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 .material-symbols-outlined {
@@ -111,24 +130,56 @@ body {
   flex-direction: column;
 }
 
-@media (prefers-reduced-motion: no-preference) {}
+/* Scrollbars styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
 
+::-webkit-scrollbar-track {
+  background: var(--Neutral-10);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--Neutral-30);
+  border-radius: 3px;
+  &:hover {
+    background: var(--Neutral-50);
+  }
+}
+
+/* Main application container */
 .streaming-console {
   background: var(--Neutral-5);
   color: var(--gray-300);
   display: flex;
   height: 100vh;
   width: 100vw;
+  position: relative;
+  overflow: hidden;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+  }
 
   a,
   a:visited,
   a:active {
-    color: var(--gray-300);
+    color: var(--Blue-500);
+    text-decoration: none;
+    transition: color var(--transition-fast) ease;
+    
+    &:hover {
+      color: var(--gray-300);
+      text-decoration: underline;
+    }
   }
 
   .disabled {
     pointer-events: none;
-
+    opacity: 0.6;
+    transition: opacity var(--transition-fast) ease;
     >* {
       pointer-events: none;
     }
@@ -144,6 +195,11 @@ body {
     gap: 1rem;
     max-width: 100%;
     overflow: hidden;
+    padding: 1rem;
+    
+    @media (max-width: 480px) {
+      padding: 0.5rem;
+    }
   }
 
   .main-app-area {
@@ -151,6 +207,9 @@ body {
     flex: 1;
     align-items: center;
     justify-content: center;
+    width: 100%;
+    position: relative;
+    overflow: hidden;
   }
 
   .function-call {
@@ -159,13 +218,66 @@ body {
     width: 100%;
     height: 50%;
     overflow-y: auto;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(5px);
+    border-radius: var(--card-border-radius);
+    padding: 1rem;
+    z-index: 10;
   }
 }
 
-/* video player */
+/* Video player styling */
 .stream {
   flex-grow: 1;
   max-width: 90%;
-  border-radius: 32px;
+  border-radius: var(--card-border-radius);
   max-height: fit-content;
+  object-fit: cover;
+  box-shadow: var(--card-shadow);
+  transition: all var(--transition-medium) ease;
+  
+  @media (max-width: 768px) {
+    max-width: 100%;
+    border-radius: var(--card-border-radius);
+  }
+}
+
+/* Glass effect for UI components */
+.glass-effect {
+  background: rgba(28, 31, 33, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(64, 69, 71, 0.2);
+  border-radius: var(--card-border-radius);
+}
+
+/* Button effects */
+.button-hover {
+  transition: all var(--transition-fast) ease;
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+  
+  &:active {
+    transform: translateY(1px);
+  }
+}
+
+/* Responsive layout improvements */
+@media (max-width: 768px) {
+  .streaming-console {
+    overflow-y: auto;
+    
+    main {
+      min-height: calc(100vh - 50px);
+    }
+  }
+}
+
+/* Dark mode improvements */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
 }
