@@ -13,14 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import "./App.scss";
 import { LiveAPIProvider } from "./contexts/LiveAPIContext";
 import SidePanel from "./components/side-panel/SidePanel";
 import { Altair } from "./components/altair/Altair";
 import ControlTray from "./components/control-tray/ControlTray";
 import cn from "classnames";
+import Logger from "./components/logger/Logger";
 
 const API_KEY = process.env.REACT_APP_GEMINI_API_KEY as string;
 if (typeof API_KEY !== "string") {
@@ -31,21 +31,55 @@ const host = "generativelanguage.googleapis.com";
 const uri = `wss://${host}/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
 
 function App() {
-  // this video reference is used for displaying the active stream, whether that is the webcam or screen capture
-  // feel free to style as you see fit
+  // Video reference for displaying the active stream (webcam or screen capture)
   const videoRef = useRef<HTMLVideoElement>(null);
-  // either the screen capture, the video or null, if null we hide it
+  // Active video stream state
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
+  // Mobile view state for responsive design
+  const [isMobileView, setIsMobileView] = useState<boolean>(window.innerWidth < 768);
+  // State for the floating log panel
+  const [showFloatingLogs, setShowFloatingLogs] = useState<boolean>(false);
+  
+  // Handle window resize for responsive design
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileView(window.innerWidth < 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   return (
     <div className="App">
       <LiveAPIProvider url={uri} apiKey={API_KEY}>
         <div className="streaming-console">
-          <SidePanel />
+          {!isMobileView && <SidePanel />}
+          
           <main>
+            <header className="app-header">
+              <h1 className="app-title">
+                <span className="logo">V</span>
+                <span className="title-text">emini</span>
+              </h1>
+              
+              {isMobileView && (
+                <button 
+                  className="menu-toggle"
+                  onClick={() => setShowFloatingLogs(!showFloatingLogs)}
+                >
+                  <span className="material-symbols-outlined filled">
+                    {showFloatingLogs ? 'close' : 'menu'}
+                  </span>
+                </button>
+              )}
+            </header>
+            
             <div className="main-app-area">
-              {/* APP goes here */}
+              {/* Altair visualization component */}
               <Altair />
+              
+              {/* Video stream */}
               <video
                 className={cn("stream", {
                   hidden: !videoRef.current || !videoStream,
@@ -54,15 +88,21 @@ function App() {
                 autoPlay
                 playsInline
               />
+              
+              {/* Floating logs panel for mobile */}
+              {isMobileView && showFloatingLogs && (
+                <div className="floating-logs-panel">
+                  <SidePanel />
+                </div>
+              )}
             </div>
-
+            
+            {/* Control tray for media controls */}
             <ControlTray
               videoRef={videoRef}
               supportsVideo={true}
               onVideoStreamChange={setVideoStream}
-            >
-              {/* put your own buttons here */}
-            </ControlTray>
+            />
           </main>
         </div>
       </LiveAPIProvider>

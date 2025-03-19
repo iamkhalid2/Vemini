@@ -13,16 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 import cn from "classnames";
 import { useEffect, useRef, useState } from "react";
-import { RiSidebarFoldLine, RiSidebarUnfoldLine } from "react-icons/ri";
+import { RiAiGenerate, RiCloseLine, RiMenu2Line } from "react-icons/ri";
 import Select from "react-select";
 import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
 import { useLoggerStore } from "../../lib/store-logger";
 import Logger, { LoggerFilterType } from "../logger/Logger";
 import "./side-panel.scss";
 
+// Filter options for the logs
 const filterOptions = [
   { value: "conversations", label: "Conversations" },
   { value: "tools", label: "Tool Use" },
@@ -35,15 +35,14 @@ export default function SidePanel() {
   const loggerRef = useRef<HTMLDivElement>(null);
   const loggerLastHeightRef = useRef<number>(-1);
   const { log, logs } = useLoggerStore();
-
   const [textInput, setTextInput] = useState("");
   const [selectedOption, setSelectedOption] = useState<{
     value: string;
     label: string;
-  } | null>(null);
+  } | null>(filterOptions[0]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  //scroll the log to the bottom when new logs come in
+  
+  // Scroll the log to the bottom when new logs come in
   useEffect(() => {
     if (loggerRef.current) {
       const el = loggerRef.current;
@@ -54,107 +53,140 @@ export default function SidePanel() {
       }
     }
   }, [logs]);
-
-  // listen for log events and store them
+  
+  // Listen for log events and store them
   useEffect(() => {
     client.on("log", log);
     return () => {
       client.off("log", log);
     };
   }, [client, log]);
-
+  
+  // Handle input submission
   const handleSubmit = () => {
+    if (!textInput.trim()) return;
+    
     client.send([{ text: textInput }]);
-
     setTextInput("");
+    
+    // Focus the input field after submission
     if (inputRef.current) {
-      inputRef.current.innerText = "";
+      inputRef.current.focus();
     }
   };
-
+  
+  // Handle Enter key press for submission
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleSubmit();
+    }
+  };
+  
   return (
     <div className={`side-panel ${open ? "open" : ""}`}>
-      <header className="top">
-        <h2>Vemini</h2>
-        {open ? (
-          <button className="opener" onClick={() => setOpen(false)}>
-            <RiSidebarFoldLine color="#b4b8bb" />
+      <header className="panel-header">
+        <div className="panel-header-content">
+          <div className="logo-container">
+            <RiAiGenerate className="logo-icon" />
+            <h2 className="panel-title">Vemini</h2>
+          </div>
+          
+          <button 
+            className="panel-toggle" 
+            aria-label={open ? "Collapse panel" : "Expand panel"}
+            onClick={() => setOpen(!open)}
+          >
+            {open ? <RiCloseLine /> : <RiMenu2Line />}
           </button>
-        ) : (
-          <button className="opener" onClick={() => setOpen(true)}>
-            <RiSidebarUnfoldLine color="#b4b8bb" />
-          </button>
-        )}
+        </div>
+        
+        <div className={cn("streaming-indicator", { connected })}>
+          <div className="indicator-dot"></div>
+          <span className="indicator-text">
+            {connected ? "Streaming" : "Paused"}
+          </span>
+        </div>
       </header>
-      <section className="indicators">
+      
+      <div className="filter-container">
         <Select
-          className="react-select"
-          classNamePrefix="react-select"
+          className="filter-select"
+          classNamePrefix="filter-select"
+          value={selectedOption}
+          options={filterOptions}
+          onChange={(option) => setSelectedOption(option)}
+          isSearchable={false}
+          aria-label="Filter logs"
           styles={{
             control: (baseStyles) => ({
               ...baseStyles,
-              background: "var(--Neutral-15)",
-              color: "var(--Neutral-90)",
-              minHeight: "33px",
-              maxHeight: "33px",
-              border: 0,
+              backgroundColor: 'var(--color-bg-tertiary)',
+              borderColor: 'var(--color-border)',
+              minHeight: '38px',
+              boxShadow: 'none',
+              '&:hover': {
+                borderColor: 'var(--color-primary)',
+              },
+            }),
+            menu: (baseStyles) => ({
+              ...baseStyles,
+              backgroundColor: 'var(--color-bg-tertiary)',
             }),
             option: (styles, { isFocused, isSelected }) => ({
               ...styles,
-              backgroundColor: isFocused
-                ? "var(--Neutral-30)"
-                : isSelected
-                  ? "var(--Neutral-20)"
+              backgroundColor: isSelected 
+                ? 'var(--color-primary)'
+                : isFocused 
+                  ? 'var(--color-bg-secondary)'
                   : undefined,
+              '&:active': {
+                backgroundColor: 'var(--color-primary-light)',
+              },
+            }),
+            singleValue: (baseStyles) => ({
+              ...baseStyles,
+              color: 'var(--color-text-primary)',
             }),
           }}
-          defaultValue={selectedOption}
-          options={filterOptions}
-          onChange={(e) => {
-            setSelectedOption(e);
-          }}
         />
-        <div className={cn("streaming-indicator", { connected })}>
-          {connected
-            ? `🔵${open ? " Streaming" : ""}`
-            : `⏸️${open ? " Paused" : ""}`}
-        </div>
-      </section>
-      <div className="side-panel-container" ref={loggerRef}>
+      </div>
+      
+      <div className="logs-container" ref={loggerRef}>
         <Logger
           filter={(selectedOption?.value as LoggerFilterType) || "none"}
         />
       </div>
+      
       <div className={cn("input-container", { disabled: !connected })}>
         <div className="input-content">
           <textarea
-            className="input-area"
+            className="input-textarea"
             ref={inputRef}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                e.stopPropagation();
-                handleSubmit();
-              }
-            }}
-            onChange={(e) => setTextInput(e.target.value)}
+            placeholder="Type your message..."
             value={textInput}
-          ></textarea>
-          <span
-            className={cn("input-content-placeholder", {
-              hidden: textInput.length,
-            })}
-          >
-            Type&nbsp;something...
-          </span>
-
+            onChange={(e) => setTextInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={!connected}
+            rows={1}
+          />
+          
           <button
-            className="send-button material-symbols-outlined filled"
+            className={cn("send-button", { active: textInput.trim().length > 0 })}
             onClick={handleSubmit}
+            disabled={!connected || textInput.trim().length === 0}
+            aria-label="Send message"
           >
-            send
+            <span className="material-symbols-outlined filled">send</span>
           </button>
         </div>
+        
+        {!connected && (
+          <div className="connection-message">
+            Start streaming to send messages
+          </div>
+        )}
       </div>
     </div>
   );
