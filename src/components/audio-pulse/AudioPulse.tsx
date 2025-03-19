@@ -13,13 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 import "./audio-pulse.scss";
 import React from "react";
-import { useEffect, useRef } from "react";
-import c from "classnames";
+import { useEffect, useRef, useState } from "react";
+import cn from "classnames";
 
-const lineCount = 3;
+// Number of audio pulse bars
+const BAR_COUNT = 5;
 
 export type AudioPulseProps = {
   active: boolean;
@@ -27,36 +27,84 @@ export type AudioPulseProps = {
   hover?: boolean;
 };
 
-export default function AudioPulse({ active, volume, hover }: AudioPulseProps) {
-  const lines = useRef<HTMLDivElement[]>([]);
-
+export default function AudioPulse({ active, volume, hover = false }: AudioPulseProps) {
+  const bars = useRef<HTMLDivElement[]>([]);
+  const [isAnimating, setIsAnimating] = useState(false);
+  
+  // Update bar heights based on volume
   useEffect(() => {
+    // Only animate if active
+    if (!active) {
+      bars.current.forEach(bar => {
+        if (bar) bar.style.height = '4px';
+      });
+      return;
+    }
+    
     let timeout: number | null = null;
+    
     const update = () => {
-      lines.current.forEach(
-        (line, i) =>
-        (line.style.height = `${Math.min(
-          24,
-          4 + volume * (i === 1 ? 400 : 60),
-        )}px`),
-      );
+      // Calculate heights for each bar with some randomness for a more natural effect
+      bars.current.forEach((bar, i) => {
+        if (!bar) return;
+        
+        // Middle bars are taller than edge bars
+        const middleIndex = Math.floor(BAR_COUNT / 2);
+        const distanceFromMiddle = Math.abs(i - middleIndex);
+        const multiplier = 1 - (distanceFromMiddle / BAR_COUNT);
+        
+        // Add some randomness for natural effect
+        const randomness = Math.random() * 0.3 + 0.85;
+        
+        // Calculate height based on volume, position, and randomness
+        const height = Math.min(
+          36,
+          4 + volume * 300 * multiplier * randomness
+        );
+        
+        bar.style.height = `${height}px`;
+      });
+      
+      // Continue animation loop
       timeout = window.setTimeout(update, 100);
+      
+      // Set animating state for CSS effects
+      if (!isAnimating && volume > 0.01) {
+        setIsAnimating(true);
+      } else if (isAnimating && volume <= 0.01) {
+        setIsAnimating(false);
+      }
     };
-
+    
     update();
-
-    return () => clearTimeout((timeout as number)!);
-  }, [volume]);
-
+    
+    return () => {
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [volume, active, isAnimating]);
+  
   return (
-    <div className={c("audioPulse", { active, hover })}>
-      {Array(lineCount)
+    <div 
+      className={cn("audio-pulse", { 
+        active, 
+        hover,
+        animating: isAnimating 
+      })}
+      aria-label={active ? "Audio visualization active" : "Audio visualization inactive"}
+    >
+      {Array(BAR_COUNT)
         .fill(null)
         .map((_, i) => (
           <div
             key={i}
-            ref={(el) => (lines.current[i] = el!)}
-            style={{ animationDelay: `${i * 133}ms` }}
+            className="pulse-bar"
+            ref={(el) => {
+              if (el) bars.current[i] = el;
+            }}
+            style={{ 
+              animationDelay: `${i * 120}ms`,
+              opacity: active ? 1 : 0.5,
+            }}
           />
         ))}
     </div>

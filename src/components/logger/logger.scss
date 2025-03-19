@@ -1,116 +1,283 @@
+@import '../../theme-variables.scss';
+
 .logger {
-  color: var(--gray-300);
   width: 100%;
-  max-width: 100%;
-  display: block;
+  height: 100%;
+  overflow-y: auto;
+  font-family: var(--font-family);
+  color: var(--color-text-primary);
 
   .logger-list {
-    padding: 0 0px 0 25px;
-    overflow-x: hidden;
-    width: calc(100% - 45px);
-  }
-
-  .user h4 {
-    color: var(--Green-500);
-  }
-
-  .model h4 {
-    color: var(--Blue-500);
-  }
-
-  .rich-log {
+    list-style: none;
+    padding: 0;
+    margin: 0;
     display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+  }
+
+  // Empty state
+  &.empty-logger {
+    display: flex;
+    align-items: center;
     justify-content: center;
-    gap: 4px;
+    height: 100%;
 
-    pre {
-      overflow-x: auto;
+    .empty-state {
+      text-align: center;
+      padding: var(--spacing-6);
+
+      p {
+        margin: var(--spacing-2) 0;
+        color: var(--color-text-secondary);
+
+        &.empty-state-hint {
+          font-size: var(--font-size-sm);
+          color: var(--color-text-tertiary);
+        }
+      }
+    }
+  }
+
+  // Log entries
+  .log-entry {
+    padding: var(--spacing-2) var(--spacing-3);
+    border-radius: var(--border-radius-lg);
+    background-color: var(--color-bg-tertiary);
+    transition: var(--transition-default);
+
+    &:hover {
+      box-shadow: var(--shadow-md);
     }
 
-    display: block;
+    &.source-client {
+      border-left: 3px solid var(--color-primary);
+    }
 
-    h4 {
-      font-size: 14px;
+    &.source-server {
+      border-left: 3px solid var(--color-secondary);
+    }
+
+    &.send {
+      background-color: rgba(124, 93, 250, 0.1);
+    }
+
+    &.receive {
+      background-color: rgba(0, 194, 255, 0.05);
+    }
+
+    .log-entry-header {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-2);
+      margin-bottom: var(--spacing-2);
+
+      .timestamp {
+        font-family: var(--font-family-mono);
+        font-size: var(--font-size-xs);
+        color: var(--color-text-tertiary);
+      }
+
+      .source-type {
+        font-size: var(--font-size-xs);
+        color: var(--color-text-tertiary);
+        background-color: var(--color-bg-secondary);
+        padding: 2px 6px;
+        border-radius: var(--border-radius-sm);
+      }
+
+      .log-count {
+        margin-left: auto;
+        background-color: var(--color-bg-secondary);
+        color: var(--color-text-tertiary);
+        font-size: var(--font-size-xs);
+        padding: 1px 6px;
+        border-radius: var(--border-radius-full);
+      }
+    }
+
+    .log-entry-content {
+      margin-left: var(--spacing-2);
+    }
+  }
+
+  // Message styling
+  .plain-text-message {
+    padding: var(--spacing-2);
+    color: var(--color-text-secondary);
+  }
+
+  .message-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: var(--spacing-2);
+
+    .role-label {
+      font-weight: var(--font-weight-medium);
+      padding: 2px 8px;
+      border-radius: var(--border-radius-sm);
+      font-size: var(--font-size-sm);
+    }
+
+    .status-label {
+      margin-left: var(--spacing-2);
+      font-size: var(--font-size-xs);
+      color: var(--color-text-tertiary);
+      font-style: italic;
+    }
+
+    &.user {
+      .role-label {
+        background-color: rgba(124, 93, 250, 0.2);
+        color: var(--color-primary-light);
+      }
+    }
+
+    &.model {
+      .role-label {
+        background-color: rgba(0, 194, 255, 0.15);
+        color: var(--color-secondary);
+      }
+    }
+
+    &.tool, &.tool-response {
+      .role-label {
+        background-color: rgba(0, 202, 144, 0.15);
+        color: var(--color-success);
+      }
+    }
+  }
+
+  .message-content {
+    padding: var(--spacing-1);
+
+    .text-part {
+      margin-bottom: var(--spacing-3);
+      white-space: pre-wrap;
+      line-height: 1.6;
+    }
+
+    .turn {
+      margin-bottom: var(--spacing-2);
+    }
+  }
+
+  // Code blocks
+  .code-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--color-bg-tertiary);
+    padding: var(--spacing-2) var(--spacing-3);
+    border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
+    border-bottom: 1px solid var(--color-border);
+
+    .code-language, 
+    .function-name, 
+    .function-id,
+    .code-result-status,
+    .inline-data-type {
+      font-family: var(--font-family-mono);
+      font-size: var(--font-size-xs);
+      color: var(--color-text-tertiary);
+    }
+
+    .function-name, .function-id {
+      color: var(--color-success);
+    }
+
+    .code-result-status {
       text-transform: uppercase;
-      padding: 8px 0;
-      margin: 0;
-    }
-
-    h5 {
-      margin: 0;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--Neutral-20);
-    }
-
-    .part {
-      background: var(--Neutral-5);
-      padding: 14px;
-      margin-bottom: 4px;
-      color: var(--Neutral-90);
-      border-radius: 8px;
+      color: var(--color-primary);
     }
   }
 
-  .plain-log {
-    &>* {
-      padding-right: 4px;
+  .copy-button {
+    background: transparent;
+    border: none;
+    color: var(--color-text-tertiary);
+    cursor: pointer;
+    padding: var(--spacing-1);
+    border-radius: var(--border-radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition-default);
+
+    &:hover {
+      color: var(--color-text-primary);
+      background-color: rgba(255, 255, 255, 0.05);
+    }
+
+    .icon-success {
+      color: var(--color-success);
     }
   }
 
-  .inline-code:not(:last-child) {
-    font-style: italic;
+  // Tool-specific styling
+  .cancellation-ids {
+    padding: var(--spacing-2);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--spacing-2);
 
-    &::after {
-      content: ", ";
+    .ids-label {
+      color: var(--color-text-secondary);
+    }
+
+    .id-code {
+      background-color: var(--color-bg-tertiary);
+      padding: 2px 6px;
+      border-radius: var(--border-radius-sm);
+      font-family: var(--font-family-mono);
+      font-size: var(--font-size-xs);
     }
   }
-}
 
-.logger li {
-  display: block;
-  padding: 8px 0;
-  color: var(--Neutral-50, #707577);
-  font-family: "Space Mono";
-  font-size: 14px;
-  font-style: normal;
-  font-weight: 400;
-  line-height: normal;
-}
+  // Syntax highlighter
+  pre {
+    margin: 0 !important;
+    border-radius: 0 0 var(--border-radius-md) var(--border-radius-md) !important;
+    font-family: var(--font-family-mono) !important;
+    font-size: var(--font-size-sm) !important;
+    max-height: 400px;
+    overflow: auto !important;
+  }
 
-.logger li .timestamp {
-  width: 70px;
-  flex-grow: 0;
-  flex-shrink: 0;
-  color: var(--Neutral-50);
-}
+  .executable-code-part,
+  .code-execution-result,
+  .function-call-part,
+  .function-response-part,
+  .any-message {
+    margin-bottom: var(--spacing-4);
+    border-radius: var(--border-radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
 
-.logger li .source {
-  flex-shrink: 0;
-  font-weight: bold;
-}
+  .inline-data-part {
+    padding: var(--spacing-2);
+    background-color: var(--color-bg-secondary);
+    border-radius: var(--border-radius-md);
+    margin-bottom: var (--spacing-3);
 
-.logger li.source-server,
-.logger li.receive {
-  color: var(--Blue-500);
-}
+    .inline-data-header {
+      margin-bottom: var(--spacing-2);
+    }
 
-.logger li.source-client,
-.logger li.send:not(.source-server) {
-  color: var(--Green-500);
-}
+    .inline-data-content {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: var(--spacing-4);
+      background-color: var(--color-bg-tertiary);
+      border-radius: var(--border-radius-sm);
 
-.logger li .count {
-  background-color: var(--Neutral-5);
-  font-size: x-small;
-  padding: 0em 0.6em;
-  padding: 0.3em 0.5em;
-  line-height: 1em;
-  vertical-align: middle;
-  border-radius: 8px;
-  color: var(--Blue-500);
-}
-
-.logger li .message {
-  flex-grow: 1;
-  color: var(--Neutral-50);
+      .inline-data-placeholder {
+        color: var(--color-text-tertiary);
+        font-style: italic;
+      }
+    }
+  }
 }

@@ -270,3 +270,158 @@ code, pre, .monospace {
   h2 { font-size: 1.5rem; }
   h3 { font-size: 1.25rem; }
 }
+
+// Add this to your App.scss file to style the new header
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-3) var(--spacing-4);
+  margin-bottom: var(--spacing-4);
+  background-color: rgba(13, 17, 23, 0.8);
+  backdrop-filter: blur(10px);
+  border-radius: var(--border-radius-xl);
+  box-shadow: var(--shadow-lg);
+  
+  .app-title {
+    display: flex;
+    align-items: center;
+    margin: 0;
+    
+    .logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
+      color: white;
+      border-radius: var(--border-radius-lg);
+      font-weight: var(--font-weight-bold);
+      font-size: var(--font-size-xl);
+      margin-right: var(--spacing-2);
+      box-shadow: 0 4px 10px rgba(124, 93, 250, 0.3);
+    }
+    
+    .title-text {
+      font-size: var(--font-size-xl);
+      font-weight: var(--font-weight-semibold);
+      background: linear-gradient(to right, var(--color-secondary), var(--color-primary-light));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: 0.5px;
+    }
+  }
+  
+  .app-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+  }
+  
+  .menu-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--color-bg-tertiary);
+    color: var(--color-text-secondary);
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--border-radius-lg);
+    cursor: pointer;
+    transition: var(--transition-default);
+    
+    &:hover {
+      background-color: var(--color-bg-secondary);
+      color: var(--color-text-primary);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+    
+    &:focus {
+      outline: 2px solid var(--color-primary);
+      outline-offset: 2px;
+    }
+  }
+}
+
+// Add styles for the floating logs panel
+.floating-logs-panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-index-30);
+  background-color: var(--color-bg-secondary);
+  animation: fadeIn 0.3s ease forwards;
+  box-shadow: var(--shadow-xl);
+}
+
+// Add to the App.scss file
+.animated-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  z-index: -1;
+  
+  .gradient-blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.15;
+    animation: float 20s ease-in-out infinite;
+    
+    &:nth-child(1) {
+      width: 40vw;
+      height: 40vw;
+      top: -10%;
+      left: -5%;
+      background: radial-gradient(circle at center, var(--color-primary-light), transparent 70%);
+      animation-delay: 0s;
+    }
+    
+    &:nth-child(2) {
+      width: 35vw;
+      height: 35vw;
+      bottom: -10%;
+      right: -5%;
+      background: radial-gradient(circle at center, var(--color-secondary), transparent 70%);
+      animation-delay: -5s;
+      animation-duration: 25s;
+    }
+    
+    &:nth-child(3) {
+      width: 25vw;
+      height: 25vw;
+      top: 40%;
+      right: 20%;
+      background: radial-gradient(circle at center, var(--color-success), transparent 70%);
+      animation-delay: -10s;
+      animation-duration: 30s;
+    }
+  }
+}
+
+@keyframes float {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(2%, 2%) scale(1.05);
+  }
+  50% {
+    transform: translate(0%, 4%) scale(0.95);
+  }
+  75% {
+    transform: translate(-2%, 2%) scale(1.05);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}

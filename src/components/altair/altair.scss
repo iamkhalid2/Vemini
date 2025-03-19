@@ -1,0 +1,231 @@
+@import '../../theme-variables.scss';
+
+.altair-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background-color: rgba(22, 27, 34, 0.6);
+  border-radius: var(--border-radius-xl);
+  backdrop-filter: blur(5px);
+  padding: var(--spacing-4);
+  box-shadow: var(--shadow-lg);
+  
+  // Vega visualization container
+  .vega-visualization {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    
+    // Override Vega embed styles for better integration
+    :global(.vega-embed) {
+      width: 100%;
+      height: 100%;
+      
+      .vega-actions {
+        font-family: var(--font-family);
+        background-color: var(--color-bg-tertiary) !important;
+        border: 1px solid var(--color-border) !important;
+        border-radius: var(--border-radius-md) !important;
+        box-shadow: var(--shadow-md) !important;
+        padding: var(--spacing-1) !important;
+        
+        a {
+          color: var(--color-text-secondary) !important;
+          font-size: var(--font-size-sm) !important;
+          padding: var(--spacing-1) var(--spacing-2) !important;
+          border-radius: var(--border-radius-sm) !important;
+          
+          &:hover {
+            background-color: var(--color-bg-secondary) !important;
+            color: var(--color-text-primary) !important;
+          }
+        }
+      }
+    }
+  }
+  
+  // Reset button to clear visualization
+  .reset-button {
+    position: absolute;
+    bottom: var(--spacing-4);
+    right: var(--spacing-4);
+    padding: var(--spacing-2) var(--spacing-4);
+    background-color: rgba(255, 71, 87, 0.15);
+    color: var(--color-error);
+    border: 1px solid var(--color-error);
+    border-radius: var(--border-radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    transition: var(--transition-default);
+    
+    &:hover {
+      background-color: rgba(255, 71, 87, 0.25);
+      transform: translateY(-2px);
+    }
+    
+    &:focus {
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(255, 71, 87, 0.3);
+    }
+  }
+  
+  // Empty state styling
+  &.empty {
+    background-color: rgba(22, 27, 34, 0.3);
+    border: 2px dashed var(--color-border);
+    
+    .altair-empty-state {
+      max-width: 500px;
+      text-align: center;
+      padding: var(--spacing-6);
+      
+      .icon-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 80px;
+        height: 80px;
+        margin: 0 auto var(--spacing-4);
+        background: linear-gradient(135deg, rgba(124, 93, 250, 0.2), rgba(0, 194, 255, 0.2));
+        border-radius: 50%;
+        
+        .chart-icon {
+          width: 40px;
+          height: 40px;
+          stroke: var(--color-primary);
+          stroke-width: 2;
+        }
+      }
+      
+      h3 {
+        color: var(--color-text-primary);
+        margin-bottom: var(--spacing-2);
+        font-size: var(--font-size-2xl);
+      }
+      
+      p {
+        color: var(--color-text-secondary);
+        margin-bottom: var(--spacing-4);
+      }
+      
+      .examples {
+        text-align: left;
+        background-color: var(--color-bg-tertiary);
+        border-radius: var(--border-radius-lg);
+        padding: var(--spacing-4);
+        
+        .example-title {
+          color: var(--color-text-primary);
+          font-weight: var(--font-weight-medium);
+          margin-bottom: var(--spacing-2);
+        }
+        
+        ul {
+          list-style-type: none;
+          padding: 0;
+          margin: 0;
+          
+          li {
+            color: var(--color-text-secondary);
+            padding: var(--spacing-2);
+            margin-bottom: var(--spacing-2);
+            background-color: var(--color-bg-secondary);
+            border-radius: var(--border-radius-md);
+            
+            &:hover {
+              background-color: rgba(124, 93, 250, 0.1);
+              color: var(--color-text-primary);
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  // Loading state styling
+  &.loading {
+    .loader {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      
+      .spinner {
+        font-size: 48px;
+        color: var(--color-primary);
+        animation: spin 1.5s linear infinite;
+        margin-bottom: var(--spacing-4);
+      }
+      
+      span {
+        color: var(--color-text-secondary);
+      }
+    }
+  }
+  
+  // Error state styling
+  &.error {
+    .error-message {
+      text-align: center;
+      max-width: 400px;
+      
+      .error-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 60px;
+        height: 60px;
+        margin: 0 auto var(--spacing-4);
+        background-color: rgba(255, 71, 87, 0.15);
+        color: var(--color-error);
+        border-radius: 50%;
+        font-size: var(--font-size-2xl);
+        font-weight: var(--font-weight-bold);
+      }
+      
+      h3 {
+        color: var(--color-error);
+        margin-bottom: var(--spacing-2);
+      }
+      
+      p {
+        color: var(--color-text-secondary);
+        margin-bottom: var(--spacing-4);
+      }
+      
+      .retry-button {
+        padding: var(--spacing-2) var(--spacing-6);
+        background-color: var(--color-bg-tertiary);
+        color: var(--color-text-primary);
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius-md);
+        font-size: var(--font-size-base);
+        cursor: pointer;
+        transition: var(--transition-default);
+        
+        &:hover {
+          background-color: var(--color-bg-secondary);
+          transform: translateY(-2px);
+        }
+      }
+    }
+  }
+}
+
+// Spinner animation
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

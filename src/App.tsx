@@ -52,6 +52,13 @@ function App() {
 
   return (
     <div className="App">
+      {/* Animated background */}
+      <div className="animated-background">
+        <div className="gradient-blob"></div>
+        <div className="gradient-blob"></div>
+        <div className="gradient-blob"></div>
+      </div>
+      
       <LiveAPIProvider url={uri} apiKey={API_KEY}>
         <div className="streaming-console">
           {!isMobileView && <SidePanel />}
@@ -64,14 +71,17 @@ function App() {
               </h1>
               
               {isMobileView && (
-                <button 
-                  className="menu-toggle"
-                  onClick={() => setShowFloatingLogs(!showFloatingLogs)}
-                >
-                  <span className="material-symbols-outlined filled">
-                    {showFloatingLogs ? 'close' : 'menu'}
-                  </span>
-                </button>
+                <div className="app-actions">
+                  <button 
+                    className="menu-toggle"
+                    onClick={() => setShowFloatingLogs(!showFloatingLogs)}
+                    aria-label={showFloatingLogs ? "Close menu" : "Open menu"}
+                  >
+                    <span className="material-symbols-outlined filled">
+                      {showFloatingLogs ? 'close' : 'menu'}
+                    </span>
+                  </button>
+                </div>
               )}
             </header>
             
